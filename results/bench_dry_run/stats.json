@@ -1,0 +1,29 @@
+{
+  "EGFP": {
+    "rule_based": {
+      "mean_hv": 1.5711554384250797e-06,
+      "baseline_mean_hv": 8.135367547995e-07,
+      "effect_size": 0.9301221573630144,
+      "p_value": 0.16666666666666666,
+      "significant": false
+    }
+  },
+  "FLuc": {
+    "rule_based": {
+      "mean_hv": 8.361781640318729e-07,
+      "baseline_mean_hv": 4.697022413005492e-07,
+      "effect_size": 0.7785727166260172,
+      "p_value": 0.16666666666666666,
+      "significant": false
+    }
+  },
+  "EPO": {
+    "rule_based": {
+      "mean_hv": 1.748395738736638e-05,
+      "baseline_mean_hv": 7.366723965765482e-06,
+      "effect_size": 1.3731830167106094,
+      "p_value": 0.16666666666666666,
+      "significant": false
+    }
+  }
+}

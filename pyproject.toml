@@ -1,0 +1,80 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mrna-design"
+version = "0.1.0"
+description = "Agentic multi-objective mRNA sequence design pipeline"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "mRNA Design Project" }]
+
+dependencies = [
+    # Core science
+    "ViennaRNA>=2.6.4",
+    "biopython>=1.83",
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "scipy>=1.13",
+    # Optimisation / Pareto
+    "pymoo>=0.6.1",
+    # Typed data models
+    "pydantic>=2.7",
+    # CLI
+    "click>=8.1",
+    "rich>=13.7",
+    # Plotting
+    "matplotlib>=3.8",
+    "seaborn>=0.13",
+    # JSON logging
+    "python-json-logger>=2.0",
+    # HTTP (LLM API — plugged in Week 7)
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+llm = [
+    "openai>=1.30",
+    "anthropic>=0.28",
+    "google-generativeai>=0.7",
+    "tenacity>=8.3",
+]
+surrogate = [
+    "scikit-learn>=1.5",
+    "torch>=2.3",
+]
+dev = [
+    "pytest>=8.2",
+    "pytest-cov>=5.0",
+    "hypothesis>=6.100",
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "ipykernel>=6.29",
+    "jupyterlab>=4.2",
+]
+
+[project.scripts]
+mrna-design = "mrna_design.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["mrna_design"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+log_cli = true
+log_cli_level = "INFO"

@@ -1,0 +1,70 @@
+[
+  {
+    "iteration": 0,
+    "hypervolume": 1.0000000000002246e-09
+  },
+  {
+    "iteration": 0,
+    "hypervolume": 0.00010765252988641848
+  },
+  {
+    "iteration": 0,
+    "hypervolume": 0.00029523869890202894
+  },
+  {
+    "iteration": 0,
+    "hypervolume": 0.00031430724499474454
+  },
+  {
+    "iteration": 1,
+    "hypervolume": 0.0005862219546479715
+  },
+  {
+    "iteration": 1,
+    "hypervolume": 0.0005883519900869603
+  },
+  {
+    "iteration": 1,
+    "hypervolume": 0.0005995277683228065
+  },
+  {
+    "iteration": 2,
+    "hypervolume": 0.0005999564011566291
+  },
+  {
+    "iteration": 3,
+    "hypervolume": 0.000600954541676817
+  },
+  {
+    "iteration": 3,
+    "hypervolume": 0.0006021935165402242
+  },
+  {
+    "iteration": 4,
+    "hypervolume": 0.0006086468915366707
+  },
+  {
+    "iteration": 4,
+    "hypervolume": 0.000796961725414355
+  },
+  {
+    "iteration": 4,
+    "hypervolume": 0.0008026207159381636
+  },
+  {
+    "iteration": 4,
+    "hypervolume": 0.0008037295320091529
+  },
+  {
+    "iteration": 5,
+    "hypervolume": 0.0008046046930316872
+  },
+  {
+    "iteration": 5,
+    "hypervolume": 0.0008383618698593887
+  },
+  {
+    "iteration": 5,
+    "hypervolume": 0.0011022710365867598
+  }
+]

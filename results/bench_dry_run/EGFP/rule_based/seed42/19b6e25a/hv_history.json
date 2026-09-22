@@ -1,0 +1,94 @@
+[
+  {
+    "iteration": 0,
+    "hypervolume": 1.0000000000002246e-09
+  },
+  {
+    "iteration": 0,
+    "hypervolume": 0.00013404412727407167
+  },
+  {
+    "iteration": 0,
+    "hypervolume": 0.0002871765039332846
+  },
+  {
+    "iteration": 0,
+    "hypervolume": 0.00035843638399675893
+  },
+  {
+    "iteration": 1,
+    "hypervolume": 0.0015983152184357332
+  },
+  {
+    "iteration": 1,
+    "hypervolume": 0.0018046051142367832
+  },
+  {
+    "iteration": 1,
+    "hypervolume": 0.0018051674585881938
+  },
+  {
+    "iteration": 1,
+    "hypervolume": 0.001816986761878088
+  },
+  {
+    "iteration": 2,
+    "hypervolume": 0.0018169867618780906
+  },
+  {
+    "iteration": 2,
+    "hypervolume": 0.0020162324225181374
+  },
+  {
+    "iteration": 2,
+    "hypervolume": 0.002028754204130936
+  },
+  {
+    "iteration": 2,
+    "hypervolume": 0.0021478163919627724
+  },
+  {
+    "iteration": 3,
+    "hypervolume": 0.0021478163919627005
+  },
+  {
+    "iteration": 3,
+    "hypervolume": 0.0021478163919624906
+  },
+  {
+    "iteration": 3,
+    "hypervolume": 0.0021523065869807133
+  },
+  {
+    "iteration": 4,
+    "hypervolume": 0.0021523065869807133
+  },
+  {
+    "iteration": 4,
+    "hypervolume": 0.0021523065869807133
+  },
+  {
+    "iteration": 4,
+    "hypervolume": 0.0021523065869807133
+  },
+  {
+    "iteration": 4,
+    "hypervolume": 0.0021523065869807133
+  },
+  {
+    "iteration": 5,
+    "hypervolume": 0.0021523065869807137
+  },
+  {
+    "iteration": 5,
+    "hypervolume": 0.0021523065869807133
+  },
+  {
+    "iteration": 5,
+    "hypervolume": 0.0021523065869807133
+  },
+  {
+    "iteration": 5,
+    "hypervolume": 0.0021523065869807133
+  }
+]

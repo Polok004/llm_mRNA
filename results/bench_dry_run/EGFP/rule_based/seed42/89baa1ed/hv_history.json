@@ -1,0 +1,62 @@
+[
+  {
+    "iteration": 0,
+    "hypervolume": 9.999999999999974e-10
+  },
+  {
+    "iteration": 0,
+    "hypervolume": 1.0665842121235306e-07
+  },
+  {
+    "iteration": 0,
+    "hypervolume": 4.2302343614365066e-07
+  },
+  {
+    "iteration": 0,
+    "hypervolume": 5.093386523387274e-07
+  },
+  {
+    "iteration": 1,
+    "hypervolume": 1.0833979878898965e-06
+  },
+  {
+    "iteration": 1,
+    "hypervolume": 1.1796828242978986e-06
+  },
+  {
+    "iteration": 1,
+    "hypervolume": 1.188625601604419e-06
+  },
+  {
+    "iteration": 1,
+    "hypervolume": 1.2143518490765276e-06
+  },
+  {
+    "iteration": 2,
+    "hypervolume": 1.214351849076528e-06
+  },
+  {
+    "iteration": 2,
+    "hypervolume": 1.327367403931427e-06
+  },
+  {
+    "iteration": 2,
+    "hypervolume": 1.3390223922308653e-06
+  },
+  {
+    "iteration": 2,
+    "hypervolume": 1.3728669984775935e-06
+  },
+  {
+    "iteration": 3,
+    "hypervolume": 1.3728669984775927e-06
+  },
+  {
+    "iteration": 3,
+    "hypervolume": 1.5591587835184637e-06
+  },
+  {
+    "iteration": 3,
+    "hypervolume": 1.6370410296610235e-06
+  }
+]
