@@ -22,18 +22,17 @@ from __future__ import annotations
 
 import time
 
+from mrna_design.logging_utils import get_logger
 from mrna_design.models.candidate import Candidate
 from mrna_design.models.edits import CodonEdit, EditProposal, EditRecord, ValidationStatus
-from mrna_design.models.objectives import ObjectiveScores
 from mrna_design.validators.codon_table import codon_to_aa, is_synonymous
 from mrna_design.validators.sequence_validator import (
+    GC_HI,
+    GC_LO,
     check_gc_bounds,
     check_no_premature_stop,
     check_restriction_sites,
-    GC_LO,
-    GC_HI,
 )
-from mrna_design.logging_utils import get_logger
 
 log = get_logger("codon_applicator")
 
@@ -55,7 +54,7 @@ def apply_edit_proposal(
         edit_records  : List of EditRecord for all edits (accepted + rejected).
     """
     # Work on a mutable list of codons
-    codons = list(candidate.codons)    # includes stop codon
+    codons = list(candidate.codons)  # includes stop codon
     records: list[EditRecord] = []
     t0 = time.time()
 
@@ -142,8 +141,7 @@ def _validate_and_apply_edit(
         new_aa = codon_to_aa(edit.new_codon)
         return _reject(
             ValidationStatus.REJECTED_NOT_SYNONYMOUS,
-            f"'{edit.original_codon}' → '{edit.new_codon}' changes AA: "
-            f"{original_aa} → {new_aa}",
+            f"'{edit.original_codon}' → '{edit.new_codon}' changes AA: {original_aa} → {new_aa}",
         )
 
     # 4. Premature stop — apply tentatively
@@ -152,9 +150,7 @@ def _validate_and_apply_edit(
     trial_cds = "".join(trial_codons)
     trial_seq = candidate.utr5 + trial_cds + candidate.utr3
 
-    stop_check = check_no_premature_stop(
-        trial_seq, candidate.cds_start, candidate.cds_end
-    )
+    stop_check = check_no_premature_stop(trial_seq, candidate.cds_start, candidate.cds_end)
     if not stop_check:
         return _reject(ValidationStatus.REJECTED_PREMATURE_STOP, stop_check.reason)
 

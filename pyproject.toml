@@ -45,6 +45,17 @@ surrogate = [
     "scikit-learn>=1.5",
     "torch>=2.3",
 ]
+# Optional RNA foundation-model embeddings. mrna_design/surrogate/rnafm.py tells
+# users to install this extra, so it has to exist.
+rnafm = [
+    "torch>=2.3",
+    "transformers>=4.40",
+]
+# Local web UI (ui/app.py). Streamlit itself is a pure-Python wheel; its pyarrow
+# dependency ships platform wheels, including cp314 on macOS arm64.
+ui = [
+    "streamlit>=1.28",
+]
 dev = [
     "pytest>=8.2",
     "pytest-cov>=5.0",

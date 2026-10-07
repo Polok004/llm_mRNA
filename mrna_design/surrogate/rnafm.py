@@ -29,9 +29,14 @@ _MODEL = None
 _TOKENIZER = None
 _DEVICE = None
 
+# These imports exist only to probe availability. The real ones happen lazily in
+# _ensure_loaded(), so importing this module never pulls torch into memory.
 try:
-    import torch
-    from transformers import AutoTokenizer, AutoModel  # type: ignore
+    import torch  # noqa: F401  (availability probe)
+    from transformers import (  # noqa: F401  (availability probe)
+        AutoModel,
+        AutoTokenizer,
+    )
 
     RNAFM_AVAILABLE = True
 except ImportError:
@@ -53,7 +58,7 @@ def _ensure_loaded() -> None:
 
     if _MODEL is None:
         import torch
-        from transformers import AutoTokenizer, AutoModel
+        from transformers import AutoModel, AutoTokenizer
 
         _DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
         _TOKENIZER = AutoTokenizer.from_pretrained(_MODEL_NAME, trust_remote_code=True)
@@ -104,20 +109,21 @@ def embed_batch(sequences: list[str], batch_size: int = 8) -> np.ndarray:
 
     for i in range(0, len(seqs), batch_size):
         batch = seqs[i : i + batch_size]
-        inputs = _TOKENIZER(batch, return_tensors="pt", padding=True, truncation=True,
-                            max_length=1024)
+        inputs = _TOKENIZER(  # type: ignore[misc]
+            batch, return_tensors="pt", padding=True, truncation=True, max_length=1024
+        )
         inputs = {k: v.to(_DEVICE) for k, v in inputs.items()}
 
         with torch.no_grad():
-            outputs = _MODEL(**inputs)
+            outputs = _MODEL(**inputs)  # type: ignore[misc]
 
         # outputs.last_hidden_state: (B, L, 640)
         hidden = outputs.last_hidden_state  # (B, L, 640)
 
         # Mean-pool over sequence positions (excluding padding tokens)
         attention_mask = inputs["attention_mask"].unsqueeze(-1).float()  # (B, L, 1)
-        sum_hidden = (hidden * attention_mask).sum(dim=1)               # (B, 640)
-        lengths = attention_mask.sum(dim=1)                              # (B, 1)
+        sum_hidden = (hidden * attention_mask).sum(dim=1)  # (B, 640)
+        lengths = attention_mask.sum(dim=1)  # (B, 1)
         mean_hidden = (sum_hidden / lengths).cpu().numpy().astype(np.float32)  # (B, 640)
 
         all_embeddings.append(mean_hidden)

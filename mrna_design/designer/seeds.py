@@ -15,34 +15,33 @@ from __future__ import annotations
 import random
 import subprocess
 import tempfile
-from pathlib import Path
 from typing import Literal
 
+from mrna_design.logging_utils import get_logger
 from mrna_design.models.candidate import Candidate
 from mrna_design.validators.codon_table import (
     HUMAN_FREQUENCIES,
-    SYNONYMOUS_CODONS,
     aa_synonyms,
     max_freq_codon,
     translate,
 )
-from mrna_design.logging_utils import get_logger
 
 log = get_logger("designer.seeds")
 
 SeedStrategy = Literal["cai_max", "gc_balanced", "harmonised", "lineardesign"]
 
-_LINEARDESIGN_BINARY = "LinearDesign"   # expected on PATH
+_LINEARDESIGN_BINARY = "LinearDesign"  # expected on PATH
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
+
 
 def _protein_to_codons_cai_max(protein: str) -> list[str]:
     """For each amino acid, pick the highest-frequency human codon."""
     result = []
     for aa in protein.upper():
         if aa == "*":
-            result.append("UAA")   # preferred human stop
+            result.append("UAA")  # preferred human stop
         else:
             result.append(max_freq_codon(aa))
     return result
@@ -62,6 +61,7 @@ def _protein_to_codons_gc_balanced(
     where lambda controls strength of GC pressure (empirically 5).
     """
     import math
+
     rng = rng or random.Random()
     _LAMBDA = 5.0
 
@@ -137,20 +137,23 @@ def _try_lineardesign(protein: str) -> list[str] | None:
         return None
 
     except FileNotFoundError:
-        log.warn("lineardesign_not_installed", hint="Build LinearDesign from source and add to PATH")
+        log.warn(
+            "lineardesign_not_installed", hint="Build LinearDesign from source and add to PATH"
+        )
         return None
     except subprocess.TimeoutExpired:
         log.warn("lineardesign_timeout")
         return None
     finally:
+        import contextlib
         import os as _os
-        try:
+
+        with contextlib.suppress(Exception):
             _os.unlink(tf_path)
-        except Exception:
-            pass
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
+
 
 def seed_candidate(
     protein: str,
@@ -192,10 +195,16 @@ def seed_candidate(
     elif strategy == "harmonised":
         codons = _protein_to_codons_harmonised(prot_clean, rng=rng)
     elif strategy == "lineardesign":
-        codons = _try_lineardesign(prot_clean)
-        if codons is None:
+        lineardesign_codons = _try_lineardesign(prot_clean)
+        if lineardesign_codons is None:
+            # The binary is not installed or failed. This is the silent-fallback
+            # trap: the run still produces a "lineardesign" seed, but it is
+            # actually cai_max, so the LinearDesign baseline is not being tested.
+            # provenance.warnings_for_missing_tools() surfaces this at startup.
             log.warn("lineardesign_fallback", fallback="cai_max")
             codons = _protein_to_codons_cai_max(prot_clean)
+        else:
+            codons = lineardesign_codons
     else:
         raise ValueError(f"Unknown seeding strategy: '{strategy}'")
 

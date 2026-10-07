@@ -16,37 +16,48 @@ Hard constraints
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Sequence
 
 from mrna_design.validators.codon_table import translate
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-GC_LO: float = 0.30   # absolute minimum; typical optimisation target is 0.45–0.65
-GC_HI: float = 0.80   # absolute maximum
+GC_LO: float = 0.30  # absolute minimum; typical optimisation target is 0.45–0.65
+GC_HI: float = 0.80  # absolute maximum
 
 # Default forbidden restriction sites (DNA alphabet for regex; converted to RNA internally)
 # Format: name → recognition site (5'→3', IUPAC DNA)
 DEFAULT_FORBIDDEN_SITES: dict[str, str] = {
-    "EcoRI":  "GAATTC",
-    "BamHI":  "GGATCC",
+    "EcoRI": "GAATTC",
+    "BamHI": "GGATCC",
     "HindIII": "AAGCTT",
-    "NotI":   "GCGGCCGC",
-    "XhoI":   "CTCGAG",
-    "SalI":   "GTCGAC",
-    "NheI":   "GCTAGC",
-    "SpeI":   "ACTAGT",
-    "AscI":   "GGCGCGCC",
-    "PacI":   "TTAATTAA",
+    "NotI": "GCGGCCGC",
+    "XhoI": "CTCGAG",
+    "SalI": "GTCGAC",
+    "NheI": "GCTAGC",
+    "SpeI": "ACTAGT",
+    "AscI": "GGCGCGCC",
+    "PacI": "TTAATTAA",
 }
 
 # IUPAC ambiguity → regex character class
 _IUPAC_REGEX: dict[str, str] = {
-    "R": "[AG]", "Y": "[CU]", "S": "[GC]", "W": "[AU]",
-    "K": "[GU]", "M": "[AC]", "B": "[CGU]", "D": "[AGU]",
-    "H": "[ACU]", "V": "[ACG]", "N": "[ACGU]",
-    "A": "A", "C": "C", "G": "G", "U": "U",
+    "R": "[AG]",
+    "Y": "[CU]",
+    "S": "[GC]",
+    "W": "[AU]",
+    "K": "[GU]",
+    "M": "[AC]",
+    "B": "[CGU]",
+    "D": "[AGU]",
+    "H": "[ACU]",
+    "V": "[ACG]",
+    "N": "[ACGU]",
+    "A": "A",
+    "C": "C",
+    "G": "G",
+    "U": "U",
 }
 
 
@@ -58,11 +69,13 @@ def _site_to_rna_regex(site_dna: str) -> str:
 
 # ── Result types ──────────────────────────────────────────────────────────────
 
+
 @dataclass(frozen=True)
 class RestrictionHit:
     enzyme: str
     site: str
-    position: int    # 0-based nt start in the full sequence
+    position: int  # 0-based nt start in the full sequence
+
 
 @dataclass(frozen=True)
 class ValidationResult:
@@ -74,6 +87,7 @@ class ValidationResult:
 
 
 # ── Validators ────────────────────────────────────────────────────────────────
+
 
 def check_protein_identity(
     sequence: str,
@@ -106,7 +120,7 @@ def check_protein_identity(
         return ValidationResult(True)
     # Provide a useful diff hint
     mismatches = [
-        i for i, (a, b) in enumerate(zip(translated_aa, expected_aa)) if a != b
+        i for i, (a, b) in enumerate(zip(translated_aa, expected_aa, strict=False)) if a != b
     ]
     length_diff = len(translated_aa) - len(expected_aa)
     return ValidationResult(
@@ -129,7 +143,7 @@ def check_no_premature_stop(
     """
     cds = sequence[cds_start:cds_end].upper().replace("T", "U")
     stop_codons = {"UAA", "UAG", "UGA"}
-    for i in range(0, len(cds) - 3, 3):   # all codons except the last (stop)
+    for i in range(0, len(cds) - 3, 3):  # all codons except the last (stop)
         codon = cds[i : i + 3]
         if codon in stop_codons:
             return ValidationResult(
@@ -190,11 +204,13 @@ def check_restriction_sites(
     for name, site_dna in forbidden.items():
         pattern = _site_to_rna_regex(site_dna)
         for m in re.finditer(pattern, cds):
-            hits.append(RestrictionHit(
-                enzyme=name,
-                site=site_dna,
-                position=cds_start + m.start(),
-            ))
+            hits.append(
+                RestrictionHit(
+                    enzyme=name,
+                    site=site_dna,
+                    position=cds_start + m.start(),
+                )
+            )
     return hits
 
 

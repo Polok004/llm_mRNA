@@ -12,10 +12,12 @@ and benchmarked by the same evaluation harness.
 
 from __future__ import annotations
 
-import random
 import math
+import random
 
+from mrna_design.baselines.nsga2 import NSGA2Controller
 from mrna_design.controller.base import BaseController
+from mrna_design.logging_utils import get_logger
 from mrna_design.models.candidate import Candidate
 from mrna_design.models.diagnostics import RegionDiagnostic
 from mrna_design.models.edits import CodonEdit, EditProposal
@@ -24,12 +26,19 @@ from mrna_design.validators.codon_table import (
     aa_synonyms,
     codon_to_aa,
 )
-from mrna_design.logging_utils import get_logger
 
 log = get_logger("baselines")
 
+__all__ = [
+    "CaiMaxController",
+    "RandomController",
+    "GeneticAlgorithmController",
+    "NSGA2Controller",
+]
+
 
 # ── CAI-max controller ────────────────────────────────────────────────────────
+
 
 class CaiMaxController(BaseController):
     """
@@ -50,10 +59,7 @@ class CaiMaxController(BaseController):
         max_edits: int = 5,
         iteration: int = 0,
     ) -> EditProposal:
-        indexed = [
-            (i, c) for i, c in enumerate(candidate.codons)
-            if aa_synonyms(codon_to_aa(c))
-        ]
+        indexed = [(i, c) for i, c in enumerate(candidate.codons) if aa_synonyms(codon_to_aa(c))]
         # Sort ascending by human frequency (lowest first — most to gain)
         indexed.sort(key=lambda x: HUMAN_FREQUENCIES.get(x[1], 0.0))
 
@@ -72,13 +78,15 @@ class CaiMaxController(BaseController):
             )
             best = next((c for c in synonyms if c != codon), None)
             if best and HUMAN_FREQUENCIES.get(best, 0.0) > HUMAN_FREQUENCIES.get(codon, 0.0):
-                edits.append(CodonEdit(
-                    codon_index=idx,
-                    original_codon=codon,
-                    new_codon=best,
-                    reason="CAI-max greedy replacement",
-                    targeting_issue=None,
-                ))
+                edits.append(
+                    CodonEdit(
+                        codon_index=idx,
+                        original_codon=codon,
+                        new_codon=best,
+                        reason="CAI-max greedy replacement",
+                        targeting_issue=None,
+                    )
+                )
                 used.add(idx)
 
         if not edits:
@@ -88,24 +96,27 @@ class CaiMaxController(BaseController):
                 aa = codon_to_aa(codon)
                 alts = [c for c in aa_synonyms(aa) if c != codon]
                 if alts:
-                    edits = [CodonEdit(
-                        codon_index=idx,
-                        original_codon=codon,
-                        new_codon=alts[0],
-                        reason="CAI-max: already optimal, exploring synonym",
-                    )]
+                    edits = [
+                        CodonEdit(
+                            codon_index=idx,
+                            original_codon=codon,
+                            new_codon=alts[0],
+                            reason="CAI-max: already optimal, exploring synonym",
+                        )
+                    ]
                     break
 
         return EditProposal(
             edits=edits or [_dummy_edit(candidate)],
             expected_improvement="Increase CAI",
-            controller_type="rule_based",   # GA/random use same type slot
+            controller_type="cai_max",
             targeting_diagnostics=[],
             iteration=iteration,
         )
 
 
 # ── Random synonymous search ───────────────────────────────────────────────────
+
 
 class RandomController(BaseController):
     """
@@ -129,8 +140,7 @@ class RandomController(BaseController):
         iteration: int = 0,
     ) -> EditProposal:
         eligible = [
-            (i, c) for i, c in enumerate(candidate.codons)
-            if len(aa_synonyms(codon_to_aa(c))) > 1
+            (i, c) for i, c in enumerate(candidate.codons) if len(aa_synonyms(codon_to_aa(c))) > 1
         ]
         if not eligible:
             return EditProposal(
@@ -145,12 +155,14 @@ class RandomController(BaseController):
             aa = codon_to_aa(codon)
             alts = [c for c in aa_synonyms(aa) if c != codon]
             new = self._rng.choice(alts)
-            edits.append(CodonEdit(
-                codon_index=idx,
-                original_codon=codon,
-                new_codon=new,
-                reason="Random synonymous substitution",
-            ))
+            edits.append(
+                CodonEdit(
+                    codon_index=idx,
+                    original_codon=codon,
+                    new_codon=new,
+                    reason="Random synonymous substitution",
+                )
+            )
         return EditProposal(
             edits=edits,
             expected_improvement="random exploration",
@@ -161,6 +173,7 @@ class RandomController(BaseController):
 
 
 # ── Genetic Algorithm controller ──────────────────────────────────────────────
+
 
 class GeneticAlgorithmController(BaseController):
     """
@@ -204,7 +217,7 @@ class GeneticAlgorithmController(BaseController):
         while len(self._population) < self._pop_size:
             individual = list(seed_codons)
             for i in range(len(individual)):
-                if self._rng.random() < 0.1:   # 10% random mutation at init
+                if self._rng.random() < 0.1:  # 10% random mutation at init
                     aa = codon_to_aa(individual[i])
                     alts = [c for c in aa_synonyms(aa) if c != individual[i]]
                     if alts:
@@ -212,7 +225,14 @@ class GeneticAlgorithmController(BaseController):
             self._population.append(individual)
 
     def _fitness(self, codons: list[str]) -> float:
-        """Simple fitness: CAI as a scalar (GA optimises CAI only; multi-obj done by archive)."""
+        """
+        Scalar fitness: CAI only.
+
+        This is the defining limitation of this baseline and the reason
+        :class:`~mrna_design.baselines.nsga2.NSGA2Controller` exists. A GA that
+        optimises CAI cannot be expected to produce a good *hypervolume* over
+        five objectives, so beating it says little. Report both.
+        """
         log_sum = 0.0
         n = 0
         for c in codons:
@@ -225,6 +245,7 @@ class GeneticAlgorithmController(BaseController):
         return math.exp(log_sum / n) if n > 0 else 0.0
 
     def _tournament(self, k: int = 3) -> list[str]:
+        assert self._population is not None, "GA population not initialised"
         pool = self._rng.choices(self._population, k=k)
         return max(pool, key=self._fitness)
 
@@ -258,7 +279,7 @@ class GeneticAlgorithmController(BaseController):
             self._init_population(seed_codons)
 
         # One GA step: produce next generation
-        new_pop = []
+        new_pop: list[list[str]] = []
         while len(new_pop) < self._pop_size:
             p1 = self._tournament()
             p2 = self._tournament()
@@ -272,15 +293,17 @@ class GeneticAlgorithmController(BaseController):
 
         # Convert diff between current candidate codons and best to edits
         edits: list[CodonEdit] = []
-        for i, (orig, new) in enumerate(zip(seed_codons, best)):
+        for i, (orig, new) in enumerate(zip(seed_codons, best, strict=True)):
             if orig != new and len(edits) < max_edits:
-                edits.append(CodonEdit(
-                    codon_index=i,
-                    original_codon=orig,
-                    new_codon=new,
-                    reason="GA offspring codon substitution",
-                    targeting_issue=None,
-                ))
+                edits.append(
+                    CodonEdit(
+                        codon_index=i,
+                        original_codon=orig,
+                        new_codon=new,
+                        reason="GA offspring codon substitution",
+                        targeting_issue=None,
+                    )
+                )
 
         if not edits:
             return EditProposal(
@@ -301,6 +324,7 @@ class GeneticAlgorithmController(BaseController):
 
 
 # ── Utility ────────────────────────────────────────────────────────────────────
+
 
 def _dummy_edit(candidate: Candidate) -> CodonEdit:
     """Return a trivial (but valid) edit for when nothing better is available."""

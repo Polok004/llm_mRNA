@@ -36,6 +36,7 @@ import numpy as np
 
 try:
     import RNA  # ViennaRNA Python bindings
+
     _RNA_AVAILABLE = True
 except ImportError:
     _RNA_AVAILABLE = False
@@ -49,23 +50,24 @@ from mrna_design.logging_utils import get_logger
 
 log = get_logger("metrics.structure")
 
-_LINEARFOLD_LONG_THRESHOLD = 2500   # nt — use LinearFold above this
-_WINDOW_SIZE_NT = 240               # nt per local-fold window
-_WINDOW_STEP_NT = 60                # nt step
+_LINEARFOLD_LONG_THRESHOLD = 2500  # nt — use LinearFold above this
+_WINDOW_SIZE_NT = 240  # nt per local-fold window
+_WINDOW_STEP_NT = 60  # nt step
 
 
 # ── Result types ──────────────────────────────────────────────────────────────
 
+
 class FoldResult(NamedTuple):
     dot_bracket: str
-    mfe: float          # kcal/mol
+    mfe: float  # kcal/mol
 
 
 @dataclass
 class EnsembleResult:
     centroid_structure: str = ""
     centroid_energy: float = 0.0
-    ensemble_diversity: float = 0.0         # Ensemble diversity (ED)
+    ensemble_diversity: float = 0.0  # Ensemble diversity (ED)
     mfe: float = 0.0
     dot_bracket: str = ""
     positional_entropy: list[float] = field(default_factory=list)
@@ -73,8 +75,8 @@ class EnsembleResult:
 
 @dataclass
 class WindowFoldResult:
-    window_start: int       # 0-based nt
-    window_end: int         # 0-based nt, exclusive
+    window_start: int  # 0-based nt
+    window_end: int  # 0-based nt, exclusive
     mfe: float
     dot_bracket: str
     gc_content: float
@@ -82,6 +84,7 @@ class WindowFoldResult:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _gc(seq: str) -> float:
     if not seq:
@@ -116,6 +119,7 @@ def _linearfold(seq: str) -> FoldResult | None:
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
+
 
 @functools.lru_cache(maxsize=512)
 def fold(seq: str, algorithm: str = "auto") -> FoldResult:
@@ -223,24 +227,28 @@ def fold_windows(
         end = start + window_size
         window = seq[start:end]
         fr = fold(window, algorithm="rnafold")
-        results.append(WindowFoldResult(
-            window_start=start,
-            window_end=end,
-            mfe=fr.mfe,
-            dot_bracket=fr.dot_bracket,
-            gc_content=_gc(window),
-        ))
+        results.append(
+            WindowFoldResult(
+                window_start=start,
+                window_end=end,
+                mfe=fr.mfe,
+                dot_bracket=fr.dot_bracket,
+                gc_content=_gc(window),
+            )
+        )
 
     if not results and n > 0:
         # Sequence shorter than window — fold the whole thing
         fr = fold(seq)
-        results.append(WindowFoldResult(
-            window_start=0,
-            window_end=n,
-            mfe=fr.mfe,
-            dot_bracket=fr.dot_bracket,
-            gc_content=_gc(seq),
-        ))
+        results.append(
+            WindowFoldResult(
+                window_start=0,
+                window_end=n,
+                mfe=fr.mfe,
+                dot_bracket=fr.dot_bracket,
+                gc_content=_gc(seq),
+            )
+        )
 
     return results
 
@@ -263,7 +271,7 @@ def start_codon_unpairing(seq: str, cds_start: int) -> float:
     window_start = max(0, cds_start - 20)
     window_end = min(n, cds_start + 20)
     window = seq[window_start:window_end]
-    aug_offset = cds_start - window_start   # AUG position in the window
+    aug_offset = cds_start - window_start  # AUG position in the window
 
     md = RNA.md()
     fc = RNA.fold_compound(window, md)
@@ -274,12 +282,8 @@ def start_codon_unpairing(seq: str, cds_start: int) -> float:
 
     # Probability AUG position i is unpaired = 1 - sum of p(i,j) for all j
     prob_unpaired_all = []
-    for k in range(aug_offset + 1, aug_offset + 4):   # 1-indexed for bpp
-        paired_prob = sum(
-            bp[min(k, j)][max(k, j)]
-            for j in range(1, len(window) + 1)
-            if j != k
-        )
+    for k in range(aug_offset + 1, aug_offset + 4):  # 1-indexed for bpp
+        paired_prob = sum(bp[min(k, j)][max(k, j)] for j in range(1, len(window) + 1) if j != k)
         prob_unpaired_all.append(max(0.0, 1.0 - min(paired_prob, 1.0)))
 
     return float(np.mean(prob_unpaired_all))

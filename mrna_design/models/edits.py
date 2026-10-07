@@ -25,11 +25,13 @@ class CodonEdit(BaseModel):
         description="0-based index of the codon in the CDS codon list.",
     )
     original_codon: str = Field(
-        min_length=3, max_length=3,
+        min_length=3,
+        max_length=3,
         description="The codon currently at codon_index (RNA alphabet, uppercase).",
     )
     new_codon: str = Field(
-        min_length=3, max_length=3,
+        min_length=3,
+        max_length=3,
         description="The replacement codon (RNA alphabet, uppercase, must be synonymous).",
     )
     reason: str = Field(
@@ -51,7 +53,7 @@ class CodonEdit(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def _not_identity(self) -> "CodonEdit":
+    def _not_identity(self) -> CodonEdit:
         if self.original_codon == self.new_codon:
             raise ValueError(
                 f"original_codon and new_codon are identical ({self.original_codon}). "
@@ -62,6 +64,7 @@ class CodonEdit(BaseModel):
 
 class ValidationStatus(str):
     """Status codes returned by the codon applicator."""
+
     ACCEPTED = "accepted"
     REJECTED_NOT_SYNONYMOUS = "rejected_not_synonymous"
     REJECTED_PREMATURE_STOP = "rejected_premature_stop"
@@ -77,7 +80,7 @@ class EditRecord(BaseModel):
     edit: CodonEdit
     status: str = Field(description="ValidationStatus string.")
     iteration: int = Field(ge=0, description="Optimisation iteration when applied.")
-    controller_type: Literal["rule_based", "llm", "ga", "random"] = "rule_based"
+    controller_type: Literal["rule_based", "llm", "ga", "random", "cai_max", "nsga2"] = "rule_based"
     delta_scores: dict[str, float] = Field(
         default_factory=dict,
         description="Score deltas (objective → new - old) for accepted edits.",
@@ -111,7 +114,7 @@ class EditProposal(BaseModel):
         default="",
         description="Controller's natural-language prediction of what should improve.",
     )
-    controller_type: Literal["rule_based", "llm", "ga", "random"] = "rule_based"
+    controller_type: Literal["rule_based", "llm", "ga", "random", "cai_max", "nsga2"] = "rule_based"
     targeting_diagnostics: list[str] = Field(
         default_factory=list,
         description="IssueType strings of diagnostics this proposal is targeting.",
@@ -124,8 +127,7 @@ class EditProposal(BaseModel):
 
     def summary(self) -> str:
         lines = [
-            f"EditProposal ({self.controller_type}, iter={self.iteration}, "
-            f"{len(self.edits)} edits)"
+            f"EditProposal ({self.controller_type}, iter={self.iteration}, {len(self.edits)} edits)"
         ]
         for e in self.edits:
             lines.append(

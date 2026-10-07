@@ -32,7 +32,7 @@ log = get_logger("metrics.immunogenicity")
 # Curated from Nallagatla & Bevilacqua (2008) and Heil et al. (2004).
 # These are exact matches; extend as needed.
 _TLR_GU_MOTIFS: list[str] = [
-    "GUUGUGU",   # canonical TLR7 stimulatory motif
+    "GUUGUGU",  # canonical TLR7 stimulatory motif
     "GUCCUUC",
     "UUGUCUU",
     "UGUCUUG",
@@ -54,8 +54,13 @@ _GU_REPEAT_PATTERN = re.compile(r"(GU){4,}")
 _COMP: dict[str, str] = {"A": "U", "U": "A", "G": "C", "C": "G"}
 
 
-def _reverse_complement(seq: str) -> str:
-    return "".join(_COMP.get(c, "N") for c in reversed(seq))
+def reverse_complement(seq: str) -> str:
+    """Reverse complement of an RNA sequence. Unknown characters map to 'N'."""
+    return "".join(_COMP.get(c, "N") for c in reversed(seq.upper().replace("T", "U")))
+
+
+# Backwards-compatible private alias (several modules imported the underscored name).
+_reverse_complement = reverse_complement
 
 
 def _count_long_dsrna_stems(seq: str, min_len: int = 40) -> int:
@@ -86,10 +91,11 @@ def _count_long_dsrna_stems(seq: str, min_len: int = 40) -> int:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class ImmunogenicityResult:
-    cpg_density: float       # per 100 nt
-    upa_density: float       # per 100 nt
+    cpg_density: float  # per 100 nt
+    upa_density: float  # per 100 nt
     gu_motif_count: int
     uridine_fraction: float
     long_dsrna_count: int
@@ -162,9 +168,11 @@ def cpg_density_windows(
     for start in range(0, n - window + 1, step):
         end = start + window
         w = seq[start:end]
-        results.append({
-            "start": start,
-            "end": end,
-            "cpg_density": w.count("CG") * (100.0 / len(w)),
-        })
+        results.append(
+            {
+                "start": start,
+                "end": end,
+                "cpg_density": w.count("CG") * (100.0 / len(w)),
+            }
+        )
     return results

@@ -9,12 +9,11 @@ from __future__ import annotations
 
 import pytest
 
-from mrna_design.controller.rule_based import RuleBasedController
 from mrna_design.baselines import CaiMaxController, RandomController
+from mrna_design.controller.rule_based import RuleBasedController
 from mrna_design.optimize import OptimizeConfig, optimize
 from mrna_design.validators.codon_table import translate
 from mrna_design.validators.sequence_validator import check_protein_identity
-
 
 # Short test protein (fast to evaluate)
 _TEST_PROTEIN = "MVSKGEELF"  # 9 aa — one codon each + stop = 30 nt CDS
@@ -104,9 +103,7 @@ def test_e2e_cai_not_decreasing_on_cai_max():
         include_lineardesign=False,
     )
     archive = optimize(protein=_TEST_PROTEIN, controller=ctrl, config=cfg)
-    cai_values = [
-        c.scores.cai for c in archive if c.scores.cai is not None
-    ]
+    cai_values = [c.scores.cai for c in archive if c.scores.cai is not None]
     if cai_values:
         assert max(cai_values) >= 0.3  # At least some meaningful CAI
 
@@ -123,5 +120,6 @@ def test_e2e_hv_history_monotone_or_stable():
     archive = optimize(protein=_TEST_PROTEIN, controller=ctrl, config=cfg)
     hv_hist = [hv for _, hv in archive.hv_history()]
     for i in range(1, len(hv_hist)):
-        assert hv_hist[i] >= hv_hist[i - 1] - 1e-9, \
-            f"Hypervolume decreased at step {i}: {hv_hist[i-1]:.6f} → {hv_hist[i]:.6f}"
+        assert hv_hist[i] >= hv_hist[i - 1] - 1e-9, (
+            f"Hypervolume decreased at step {i}: {hv_hist[i - 1]:.6f} → {hv_hist[i]:.6f}"
+        )

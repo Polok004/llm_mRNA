@@ -4,20 +4,20 @@ Tests for controllers (RuleBasedController, baselines).
 
 from __future__ import annotations
 
-import pytest
-
-from mrna_design.controller.rule_based import RuleBasedController
+from mrna_design.baselines import CaiMaxController, GeneticAlgorithmController, RandomController
 from mrna_design.controller.pareto_archive import ParetoArchive, _dominates
-from mrna_design.baselines import CaiMaxController, RandomController, GeneticAlgorithmController
+from mrna_design.controller.rule_based import RuleBasedController
 from mrna_design.models.diagnostics import IssueType, Region, RegionDiagnostic, Severity
 from mrna_design.models.edits import EditProposal
-from mrna_design.validators.codon_table import codon_to_aa, is_synonymous, aa_synonyms
-
+from mrna_design.validators.codon_table import is_synonymous
 
 # ── Rule-based controller ─────────────────────────────────────────────────────
 
+
 class TestRuleBasedController:
-    def _make_diag(self, issue: IssueType, window_start: int = 0, window_end: int = 30) -> RegionDiagnostic:
+    def _make_diag(
+        self, issue: IssueType, window_start: int = 0, window_end: int = 30
+    ) -> RegionDiagnostic:
         return RegionDiagnostic(
             region=Region.CDS,
             issue=issue,
@@ -44,8 +44,12 @@ class TestRuleBasedController:
 
     def test_all_proposed_edits_are_synonymous(self, egfp_cds_candidate):
         ctrl = RuleBasedController(rng_seed=0)
-        for issue in (IssueType.CODON_DESERT, IssueType.CPG_HOTSPOT,
-                      IssueType.UPA_HOTSPOT, IssueType.LOCAL_STABLE_STEM):
+        for issue in (
+            IssueType.CODON_DESERT,
+            IssueType.CPG_HOTSPOT,
+            IssueType.UPA_HOTSPOT,
+            IssueType.LOCAL_STABLE_STEM,
+        ):
             diag = self._make_diag(issue, 0, len(egfp_cds_candidate.cds))
             proposal = ctrl.propose_edits(
                 candidate=egfp_cds_candidate,
@@ -55,8 +59,9 @@ class TestRuleBasedController:
                 iteration=1,
             )
             for edit in proposal.edits:
-                assert is_synonymous(edit.original_codon, edit.new_codon), \
+                assert is_synonymous(edit.original_codon, edit.new_codon), (
                     f"Non-synonymous edit proposed: {edit.original_codon}→{edit.new_codon}"
+                )
 
     def test_respects_max_edits(self, egfp_cds_candidate):
         ctrl = RuleBasedController(rng_seed=0)
@@ -69,8 +74,9 @@ class TestRuleBasedController:
                 max_edits=max_edits,
                 iteration=1,
             )
-            assert len(proposal.edits) <= max_edits, \
+            assert len(proposal.edits) <= max_edits, (
                 f"Proposed {len(proposal.edits)} edits but max was {max_edits}"
+            )
 
     def test_no_duplicate_codon_indices(self, egfp_cds_candidate):
         ctrl = RuleBasedController(rng_seed=0)
@@ -106,16 +112,19 @@ class TestRuleBasedController:
         )
         for edit in proposal.edits:
             actual = egfp_cds_candidate.codons[edit.codon_index]
-            assert edit.original_codon == actual, \
-                f"Wrong original codon at index {edit.codon_index}: " \
+            assert edit.original_codon == actual, (
+                f"Wrong original codon at index {edit.codon_index}: "
                 f"proposed '{edit.original_codon}' but actual is '{actual}'"
+            )
 
 
 # ── Baselines ─────────────────────────────────────────────────────────────────
 
+
 class TestCaiMaxController:
     def test_proposes_higher_cai_codon(self, egfp_cds_candidate):
         from mrna_design.validators.codon_table import HUMAN_FREQUENCIES
+
         ctrl = CaiMaxController()
         proposal = ctrl.propose_edits(
             candidate=egfp_cds_candidate,
@@ -127,8 +136,10 @@ class TestCaiMaxController:
             assert is_synonymous(edit.original_codon, edit.new_codon)
             if "already optimal" not in edit.reason:
                 # New codon should have >= frequency of old
-                assert HUMAN_FREQUENCIES.get(edit.new_codon, 0) >= \
-                       HUMAN_FREQUENCIES.get(edit.original_codon, 0) - 1e-6
+                assert (
+                    HUMAN_FREQUENCIES.get(edit.new_codon, 0)
+                    >= HUMAN_FREQUENCIES.get(edit.original_codon, 0) - 1e-6
+                )
 
     def test_all_synonymous(self, egfp_cds_candidate):
         ctrl = CaiMaxController()
@@ -150,8 +161,6 @@ class TestRandomController:
         prop_a = ctrl_a.propose_edits(egfp_cds_candidate, [], [], max_edits=5)
         prop_b = ctrl_b.propose_edits(egfp_cds_candidate, [], [], max_edits=5)
         # Very likely different
-        indices_a = {e.codon_index for e in prop_a.edits}
-        indices_b = {e.codon_index for e in prop_b.edits}
         # At least one different (probabilistic — seed 1 vs 2 almost certainly differ)
         # Soft assertion: just check they are both valid
         assert len(prop_a.edits) > 0
@@ -175,10 +184,12 @@ class TestGeneticAlgorithmController:
 
 # ── Pareto archive ────────────────────────────────────────────────────────────
 
+
 class TestParetoArchive:
-    def _make_scored_candidate(self, cai, mfe, cpg=0.5) -> "Candidate":
+    def _make_scored_candidate(self, cai, mfe, cpg=0.5):
         from mrna_design.designer.seeds import seed_candidate
         from mrna_design.models.objectives import ObjectiveScores
+
         c = seed_candidate("MVS", strategy="cai_max")
         scores = ObjectiveScores(
             cai=cai,
@@ -200,8 +211,8 @@ class TestParetoArchive:
     def test_dominance_logic(self):
         # a dominates b: all(a <= b) and at least one a < b
         assert _dominates([1.0, 2.0], [1.5, 2.5])
-        assert not _dominates([1.0, 2.0], [1.0, 2.0])   # equal
-        assert not _dominates([1.0, 2.5], [1.5, 2.0])   # non-dominated
+        assert not _dominates([1.0, 2.0], [1.0, 2.0])  # equal
+        assert not _dominates([1.0, 2.5], [1.5, 2.0])  # non-dominated
 
     def test_archive_accepts_non_dominated(self):
         archive = ParetoArchive()
@@ -239,6 +250,7 @@ class TestParetoArchive:
 
     def test_to_dataframe(self):
         import pandas as pd
+
         archive = ParetoArchive()
         c = self._make_scored_candidate(cai=0.9, mfe=-30.0)
         archive.update(c, iteration=1)

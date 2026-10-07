@@ -4,14 +4,13 @@ Tests for metrics (CAI, immunogenicity; structure requires ViennaRNA).
 
 from __future__ import annotations
 
-import math
 import pytest
 
-from mrna_design.metrics.cai import cai, cai_vector, gc_content, gc3_content, sliding_window_cai
+from mrna_design.metrics.cai import cai, cai_vector, gc3_content, gc_content, sliding_window_cai
 from mrna_design.metrics.immunogenicity import compute_immunogenicity, cpg_density_windows
 
-
 # ── CAI ────────────────────────────────────────────────────────────────────────
+
 
 class TestCAI:
     def test_cai_range(self, egfp_cds_candidate):
@@ -21,7 +20,8 @@ class TestCAI:
 
     def test_cai_max_is_one(self):
         """A CDS where every codon is the highest-frequency human codon should have CAI=1."""
-        from mrna_design.validators.codon_table import SYNONYMOUS_CODONS, HUMAN_FREQUENCIES
+        from mrna_design.validators.codon_table import HUMAN_FREQUENCIES, SYNONYMOUS_CODONS
+
         codons = []
         for aa, aa_codons in SYNONYMOUS_CODONS.items():
             if aa in ("*", "M", "W"):
@@ -36,10 +36,12 @@ class TestCAI:
     def test_cai_all_rare_codons_low(self):
         """A CDS of all rare codons should have lower CAI than CAI-max."""
         from mrna_design.designer.seeds import seed_candidate
+
         protein = "MVSKGEEL"
         cai_max_c = seed_candidate(protein, strategy="cai_max")
         # Manually build a very rare-codon CDS (use lowest-freq synonyms)
         from mrna_design.validators.codon_table import HUMAN_FREQUENCIES, aa_synonyms
+
         rare_codons = []
         for aa in protein:
             synonyms = aa_synonyms(aa)
@@ -50,7 +52,6 @@ class TestCAI:
             rare_codons.append(rare)
         rare_codons.append("UAA")  # stop
         rare_cds = "".join(rare_codons)
-        rare_c = seed_candidate(protein, strategy="cai_max")  # use for structure
         rare_score = cai(rare_cds)
         cai_max_score = cai(cai_max_c.cds)
         assert rare_score <= cai_max_score
@@ -84,6 +85,7 @@ class TestCAI:
 
 
 # ── Immunogenicity ────────────────────────────────────────────────────────────
+
 
 class TestImmunogenicity:
     def test_cpg_density_known(self):
@@ -125,6 +127,7 @@ class TestImmunogenicity:
 
 # ── Structure (skipped if ViennaRNA not available) ─────────────────────────────
 
+
 class TestStructure:
     @pytest.mark.skipif(
         not pytest.importorskip("RNA", reason="ViennaRNA not installed"),
@@ -132,6 +135,7 @@ class TestStructure:
     )
     def test_fold_mfe_is_float(self, egfp_cds_candidate):
         from mrna_design.metrics.structure import fold
+
         result = fold(egfp_cds_candidate.cds[:60])
         assert isinstance(result.mfe, float)
         assert result.mfe <= 0.0  # stable RNA should have negative MFE
@@ -142,6 +146,7 @@ class TestStructure:
     )
     def test_fold_dot_bracket_length(self, egfp_cds_candidate):
         from mrna_design.metrics.structure import fold
+
         seq = egfp_cds_candidate.cds[:60]
         result = fold(seq)
         assert len(result.dot_bracket) == len(seq)

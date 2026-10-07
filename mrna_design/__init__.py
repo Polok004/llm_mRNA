@@ -4,7 +4,7 @@ mrna_design — Agentic multi-objective mRNA sequence design pipeline.
 Public re-exports for the most commonly used symbols.
 """
 
-from importlib.metadata import version, PackageNotFoundError
+from importlib.metadata import PackageNotFoundError, version
 
 try:
     __version__ = version("mrna-design")

@@ -22,7 +22,7 @@ Seeed-match logic (Grimson et al. 2007)
 
 from __future__ import annotations
 
-import json
+import contextlib
 import os
 import re
 import subprocess
@@ -36,29 +36,39 @@ log = get_logger("metrics.safety")
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-_MIRBASE_FASTA = Path(os.environ.get(
-    "MIRBASE_DB",
-    str(Path(__file__).parent.parent.parent / "data" / "mirbase" / "hsa_mature.fa"),
-))
-_GENCODE_DB = Path(os.environ.get(
-    "GENCODE_DB",
-    str(Path(__file__).parent.parent.parent / "data" / "gencode" / "cds_blast_db"),
-))
+_MIRBASE_FASTA = Path(
+    os.environ.get(
+        "MIRBASE_DB",
+        str(Path(__file__).parent.parent.parent / "data" / "mirbase" / "hsa_mature.fa"),
+    )
+)
+_GENCODE_DB = Path(
+    os.environ.get(
+        "GENCODE_DB",
+        str(Path(__file__).parent.parent.parent / "data" / "gencode" / "cds_blast_db"),
+    )
+)
 
 _BLAST_EVALUE = 0.01
-_BLAST_WORD_SIZE = 7    # appropriate for miRNA-length short sequences
+_BLAST_WORD_SIZE = 7  # appropriate for miRNA-length short sequences
 _RNAHYBRID_TIMEOUT = 30  # seconds per call
+
+# Seed-match stringency ranking. A single site is classified exactly once, by the
+# most stringent class it satisfies, so an 8mer is never also counted as a 7mer-m8.
+_SEED_STRINGENCY: dict[str, int] = {"7mer-A1": 1, "7mer-m8": 2, "8mer": 3}
 
 
 # ── Result types ──────────────────────────────────────────────────────────────
 
+
 @dataclass
 class MirnaSeedHit:
     mirna_id: str
-    seed_type: str          # "8mer", "7mer-m8", "7mer-A1"
-    target_start: int       # 0-based nt in the provided `target_region` string
+    seed_type: str  # "8mer", "7mer-m8", "7mer-A1"
+    target_start: int  # 0-based nt in the provided `target_region` string
     target_end: int
-    seed_sequence: str      # the seed (nt 2-8 of miRNA)
+    seed_sequence: str  # the seed (nt 2-8 of miRNA)
+
 
 @dataclass
 class RnahybridHit:
@@ -66,6 +76,7 @@ class RnahybridHit:
     delta_g: float
     target_start: int
     target_end: int
+
 
 @dataclass
 class BlastHit:
@@ -75,6 +86,7 @@ class BlastHit:
     alignment_len: int
     evalue: float
     bitscore: float
+
 
 @dataclass
 class SafetyResult:
@@ -92,6 +104,7 @@ class SafetyResult:
 
 
 # ── miRNA seed scanner ────────────────────────────────────────────────────────
+
 
 def _load_mirna_seeds(fasta_path: Path) -> dict[str, str]:
     """
@@ -148,82 +161,84 @@ def scan_mirna_seeds(
     """
     target = target.upper().replace("T", "U")
     mirnas = _get_mirnas()
-    hits: list[MirnaSeedHit] = []
 
-    seed_types = {
-        "8mer": True,
-        "7mer-m8": True,
-        "7mer-A1": min_seed_type != "8mer",
-    }
-    if min_seed_type == "8mer":
-        seed_types["7mer-m8"] = False
-        seed_types["7mer-A1"] = False
+    if min_seed_type not in _SEED_STRINGENCY:
+        raise ValueError(
+            f"min_seed_type must be one of {sorted(_SEED_STRINGENCY)}, got {min_seed_type!r}"
+        )
+    min_rank = _SEED_STRINGENCY[min_seed_type]
+
+    from mrna_design.metrics.immunogenicity import reverse_complement
+
+    # site_key -> hit, keeping only the single most stringent classification per site.
+    best_at_site: dict[tuple[str, int], MirnaSeedHit] = {}
+
+    def _offer(hit: MirnaSeedHit) -> None:
+        """Record `hit` unless a more stringent hit already covers the same site."""
+        key = (hit.mirna_id, hit.target_start)
+        incumbent = best_at_site.get(key)
+        if (
+            incumbent is None
+            or _SEED_STRINGENCY[hit.seed_type] > _SEED_STRINGENCY[incumbent.seed_type]
+        ):
+            best_at_site[key] = hit
 
     for mirna_id, mirna_seq in mirnas.items():
         if len(mirna_seq) < 8:
             continue
-        # Seed = nt 2-8 of miRNA (1-indexed → indices 1:8 in Python)
-        seed_7 = mirna_seq[1:7]   # nt 2-7  (6-mer)
-        seed_8 = mirna_seq[1:8]   # nt 2-8  (7-mer)
+        # Seed = nt 2-8 of the miRNA (1-indexed) -> Python slice [1:8].
+        seed_7 = mirna_seq[1:7]  # nt 2-7  (6-mer)
+        seed_8 = mirna_seq[1:8]  # nt 2-8  (7-mer)
 
-        # miRNA binds in antiparallel — we look for reverse complement of seed in target
-        from mrna_design.metrics.immunogenicity import _reverse_complement
+        # The miRNA pairs antiparallel to the mRNA, so we search the target for
+        # the reverse complement of the seed.
+        rc_seed_7 = reverse_complement(seed_7)
+        rc_seed_8 = reverse_complement(seed_8)
 
-        rc_seed_7 = _reverse_complement(seed_7)
-        rc_seed_8 = _reverse_complement(seed_8)
-
-        # 8mer: rc of nt2-8 matches + A at target position before match
-        if seed_types["8mer"]:
-            for m in re.finditer(re.escape(rc_seed_8), target):
-                pos = m.start()
-                if pos > 0 and target[pos - 1] == "A":
-                    hits.append(MirnaSeedHit(
-                        mirna_id=mirna_id,
-                        seed_type="8mer",
-                        target_start=region_offset + pos - 1,
-                        target_end=region_offset + pos + len(rc_seed_8),
-                        seed_sequence=rc_seed_8,
-                    ))
-
-        # 7mer-m8: rc of nt2-8 matches (no A requirement)
-        if seed_types["7mer-m8"]:
-            for m in re.finditer(re.escape(rc_seed_8), target):
-                pos = m.start()
-                hits.append(MirnaSeedHit(
+        # A single genomic site is classified EXACTLY ONCE, most stringent wins:
+        #   rc(nt2-8) present and preceded by A  -> 8mer
+        #   rc(nt2-8) present, not preceded by A -> 7mer-m8
+        #   rc(nt2-7) present and preceded by A  -> 7mer-A1
+        # Anchoring every hit on the A1 position (pos - 1) keeps the site key
+        # consistent across classes so the three cannot double-count each other.
+        for m in re.finditer(re.escape(rc_seed_8), target):
+            pos = m.start()
+            has_a1 = pos > 0 and target[pos - 1] == "A"
+            seed_type = "8mer" if has_a1 else "7mer-m8"
+            if _SEED_STRINGENCY[seed_type] < min_rank:
+                continue
+            site_start = pos - 1 if has_a1 else pos
+            _offer(
+                MirnaSeedHit(
                     mirna_id=mirna_id,
-                    seed_type="7mer-m8",
-                    target_start=region_offset + pos,
+                    seed_type=seed_type,
+                    target_start=region_offset + site_start,
                     target_end=region_offset + pos + len(rc_seed_8),
                     seed_sequence=rc_seed_8,
-                ))
+                )
+            )
 
-        # 7mer-A1: rc of nt2-7 matches + A at target position before match
-        if seed_types["7mer-A1"]:
+        if _SEED_STRINGENCY["7mer-A1"] >= min_rank:
             for m in re.finditer(re.escape(rc_seed_7), target):
                 pos = m.start()
                 if pos > 0 and target[pos - 1] == "A":
-                    hits.append(MirnaSeedHit(
-                        mirna_id=mirna_id,
-                        seed_type="7mer-A1",
-                        target_start=region_offset + pos - 1,
-                        target_end=region_offset + pos + len(rc_seed_7),
-                        seed_sequence=rc_seed_7,
-                    ))
+                    _offer(
+                        MirnaSeedHit(
+                            mirna_id=mirna_id,
+                            seed_type="7mer-A1",
+                            target_start=region_offset + pos - 1,
+                            target_end=region_offset + pos + len(rc_seed_7),
+                            seed_sequence=rc_seed_7,
+                        )
+                    )
 
-    # Deduplicate: same position and miRNA
-    seen: set[tuple] = set()
-    unique: list[MirnaSeedHit] = []
-    for h in hits:
-        key = (h.mirna_id, h.target_start, h.seed_type)
-        if key not in seen:
-            seen.add(key)
-            unique.append(h)
-
+    unique = sorted(best_at_site.values(), key=lambda h: (h.target_start, h.mirna_id))
     log.event("mirna_scan_done", n_hits=len(unique), target_len=len(target))
     return unique
 
 
 # ── RNAhybrid wrapper ─────────────────────────────────────────────────────────
+
 
 def run_rnahybrid(
     target: str,
@@ -249,11 +264,16 @@ def run_rnahybrid(
         proc = subprocess.run(
             [
                 "RNAhybrid",
-                "-t", tf_path,
-                "-q", str(mirna_fasta),
-                "-e", str(min_delta_g),
-                "-m", str(max_hits),
-                "-s", "3utr_human",
+                "-t",
+                tf_path,
+                "-q",
+                str(mirna_fasta),
+                "-e",
+                str(min_delta_g),
+                "-m",
+                str(max_hits),
+                "-s",
+                "3utr_human",
             ],
             capture_output=True,
             text=True,
@@ -271,22 +291,20 @@ def run_rnahybrid(
                 if line.startswith("miRNA"):
                     current_mirna = line.split()[-1] if line.split() else ""
                 elif line.startswith("mfe:"):
-                    try:
+                    with contextlib.suppress(IndexError, ValueError):
                         current_dg = float(line.split()[1])
-                    except (IndexError, ValueError):
-                        pass
                 elif line.startswith("position"):
-                    try:
+                    with contextlib.suppress(IndexError, ValueError):
                         current_pos = int(line.split()[-1])
-                    except (IndexError, ValueError):
-                        pass
                     if current_mirna:
-                        hits.append(RnahybridHit(
-                            mirna_id=current_mirna,
-                            delta_g=current_dg,
-                            target_start=current_pos,
-                            target_end=current_pos + 21,  # approx miRNA length
-                        ))
+                        hits.append(
+                            RnahybridHit(
+                                mirna_id=current_mirna,
+                                delta_g=current_dg,
+                                target_start=current_pos,
+                                target_end=current_pos + 21,  # approx miRNA length
+                            )
+                        )
         log.event("rnahybrid_done", n_hits=len(hits))
         return hits
 
@@ -298,13 +316,13 @@ def run_rnahybrid(
         return []
     finally:
         import os as _os
-        try:
+
+        with contextlib.suppress(Exception):
             _os.unlink(tf_path)
-        except Exception:
-            pass
 
 
 # ── BLAST+ wrapper ────────────────────────────────────────────────────────────
+
 
 def run_blast_short(
     query_seq: str,
@@ -330,13 +348,20 @@ def run_blast_short(
         proc = subprocess.run(
             [
                 "blastn",
-                "-task", "blastn-short",
-                "-db", str(db_path),
-                "-query", tf_path,
-                "-evalue", str(evalue),
-                "-max_target_seqs", str(max_hits),
-                "-outfmt", "6 qseqid sseqid pident length evalue bitscore",
-                "-word_size", str(_BLAST_WORD_SIZE),
+                "-task",
+                "blastn-short",
+                "-db",
+                str(db_path),
+                "-query",
+                tf_path,
+                "-evalue",
+                str(evalue),
+                "-max_target_seqs",
+                str(max_hits),
+                "-outfmt",
+                "6 qseqid sseqid pident length evalue bitscore",
+                "-word_size",
+                str(_BLAST_WORD_SIZE),
             ],
             capture_output=True,
             text=True,
@@ -348,14 +373,16 @@ def run_blast_short(
                 parts = line.split("\t")
                 if len(parts) >= 6:
                     try:
-                        hits.append(BlastHit(
-                            query_id=parts[0],
-                            subject_id=parts[1],
-                            pct_identity=float(parts[2]),
-                            alignment_len=int(parts[3]),
-                            evalue=float(parts[4]),
-                            bitscore=float(parts[5]),
-                        ))
+                        hits.append(
+                            BlastHit(
+                                query_id=parts[0],
+                                subject_id=parts[1],
+                                pct_identity=float(parts[2]),
+                                alignment_len=int(parts[3]),
+                                evalue=float(parts[4]),
+                                bitscore=float(parts[5]),
+                            )
+                        )
                     except ValueError:
                         continue
         log.event("blast_done", n_hits=len(hits))
@@ -369,13 +396,13 @@ def run_blast_short(
         return []
     finally:
         import os as _os
-        try:
+
+        with contextlib.suppress(Exception):
             _os.unlink(tf_path)
-        except Exception:
-            pass
 
 
 # ── Aggregate ─────────────────────────────────────────────────────────────────
+
 
 def compute_safety(
     sequence: str,

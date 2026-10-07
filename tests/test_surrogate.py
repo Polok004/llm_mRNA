@@ -6,27 +6,26 @@ All tests run offline — the synthetic OV dataset is used throughout.
 
 from __future__ import annotations
 
-import math
 import numpy as np
 import pytest
 
 from mrna_design.surrogate.features import (
     DIM,
     FEATURE_NAMES,
+    _count_poly_runs,
+    _dinuc_shannon,
     batch_extract,
     extract,
-    _dinuc_shannon,
-    _count_poly_runs,
 )
+from mrna_design.surrogate.model import SurrogateModel, SurrogatePrediction
 from mrna_design.surrogate.openvaccine import (
     OVRecord,
     _synthetic_dataset,
     records_to_arrays,
 )
-from mrna_design.surrogate.model import SurrogateModel, SurrogatePrediction
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture(scope="module")
 def synthetic_records():
@@ -36,7 +35,7 @@ def synthetic_records():
 @pytest.fixture(scope="module")
 def fitted_model(synthetic_records):
     model = SurrogateModel(n_estimators=50)
-    model.fit(synthetic_records, cv_folds=0)   # no CV for speed
+    model.fit(synthetic_records, cv_folds=0)  # no CV for speed
     return model
 
 
@@ -47,6 +46,7 @@ def egfp_feat(egfp_cds_candidate):
 
 
 # ── Feature extractor ─────────────────────────────────────────────────────────
+
 
 class TestFeatures:
     def test_output_dim(self, egfp_cds_candidate):
@@ -71,8 +71,7 @@ class TestFeatures:
     def test_no_nan(self, egfp_feat):
         """After NaN filtering in cai_vector, a proper CDS should yield no NaN."""
         assert not np.any(np.isnan(egfp_feat)), (
-            f"Feature vector contains NaN at indices: "
-            f"{np.where(np.isnan(egfp_feat))[0].tolist()}"
+            f"Feature vector contains NaN at indices: {np.where(np.isnan(egfp_feat))[0].tolist()}"
         )
 
     def test_no_inf(self, egfp_feat):
@@ -100,21 +99,23 @@ class TestFeatures:
 
     def test_cai_max_higher_than_random(self, egfp_cds_candidate):
         """CAI-max seeded candidate should have higher CAI feature than random."""
-        from mrna_design.designer.seeds import seed_candidate
         import random
+
+        from mrna_design.designer.seeds import seed_candidate
+
         rng = random.Random(0)
         cai_max = egfp_cds_candidate
-        harmonised = seed_candidate(
-            cai_max.protein, strategy="harmonised", rng=rng
-        )
+        harmonised = seed_candidate(cai_max.protein, strategy="harmonised", rng=rng)
         feat_cai = extract(cai_max.sequence, cai_max.cds_start, cai_max.cds_end)
         feat_harm = extract(harmonised.sequence, harmonised.cds_start, harmonised.cds_end)
         # CAI-max should have higher or equal feature[0] (CAI)
         assert feat_cai[0] >= feat_harm[0] - 0.05  # allow small numerical margin
 
     def test_different_sequences_give_different_features(self, egfp_cds_candidate):
-        from mrna_design.designer.seeds import seed_candidate
         import random
+
+        from mrna_design.designer.seeds import seed_candidate
+
         c1 = egfp_cds_candidate
         c2 = seed_candidate(c1.protein, strategy="gc_balanced", rng=random.Random(99))
         f1 = extract(c1.sequence, c1.cds_start, c1.cds_end)
@@ -124,6 +125,7 @@ class TestFeatures:
 
 
 # ── OpenVaccine data loader ───────────────────────────────────────────────────
+
 
 class TestOpenVaccineLoader:
     def test_synthetic_length(self, synthetic_records):
@@ -155,6 +157,7 @@ class TestOpenVaccineLoader:
 
 # ── Surrogate model ───────────────────────────────────────────────────────────
 
+
 class TestSurrogateModel:
     def test_fit_returns_scores(self, synthetic_records):
         model = SurrogateModel(n_estimators=20)
@@ -162,7 +165,7 @@ class TestSurrogateModel:
         assert isinstance(scores, dict)
         # With synthetic GC-correlated targets, R² should be positive
         if "reactivity_r2" in scores:
-            assert scores["reactivity_r2"] > -1.0   # not worse than a flat baseline
+            assert scores["reactivity_r2"] > -1.0  # not worse than a flat baseline
 
     def test_predict_returns_correct_type(self, fitted_model, egfp_cds_candidate):
         pred = fitted_model.predict(egfp_cds_candidate)
@@ -194,6 +197,7 @@ class TestSurrogateModel:
     def test_predict_without_fit_raises(self):
         model = SurrogateModel(n_estimators=10)
         from mrna_design.designer.seeds import seed_candidate
+
         c = seed_candidate("MVS", strategy="cai_max")
         with pytest.raises(RuntimeError, match="not fitted"):
             model.predict(c)
@@ -205,6 +209,7 @@ class TestSurrogateModel:
         assert loaded._fitted
 
         from mrna_design.designer.seeds import seed_candidate
+
         c = seed_candidate("MVS", strategy="cai_max")
         pred_orig = fitted_model.predict(c)
         pred_loaded = loaded.predict(c)
@@ -221,18 +226,26 @@ class TestSurrogateModel:
         objective vector should include the degradation term."""
         pred = fitted_model.predict(egfp_cds_candidate)
         # Patch scores
-        c = egfp_cds_candidate
         from mrna_design.models.objectives import ObjectiveScores
+
         scores = ObjectiveScores(
-            mfe=-20.0, gc_content=0.5, gc3_content=0.5, cai=0.8,
-            cpg_density=1.0, upa_density=1.5, gu_motif_count=0,
-            uridine_fraction=0.25, long_dsrna_count=0,
-            mirna_seed_hits=0, blast_hits=0, uorf_count=0,
+            mfe=-20.0,
+            gc_content=0.5,
+            gc3_content=0.5,
+            cai=0.8,
+            cpg_density=1.0,
+            upa_density=1.5,
+            gu_motif_count=0,
+            uridine_fraction=0.25,
+            long_dsrna_count=0,
+            mirna_seed_hits=0,
+            blast_hits=0,
+            uorf_count=0,
             start_unpairing_prob=0.7,
             surrogate_degradation=pred.mean_degradation,
             surrogate_reactivity=pred.mean_reactivity,
             surrogate_confidence=pred.confidence,
         )
         vec = scores.to_objective_vector()
-        assert len(vec) == 10   # 9 primary + 1 degradation
+        assert len(vec) == 10  # 9 primary + 1 degradation
         assert vec[9] == pytest.approx(pred.mean_degradation, abs=1e-5)

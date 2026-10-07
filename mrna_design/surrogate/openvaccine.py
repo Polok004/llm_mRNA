@@ -24,10 +24,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
 
 import numpy as np
-
 
 _DEFAULT_DATA_PATH = Path(__file__).parent.parent.parent / "data" / "openvaccine" / "train.json"
 
@@ -38,9 +36,10 @@ _DEG_COLS = ["deg_Mg_pH10", "deg_Mg_50C", "deg_pH10", "deg_50C"]
 @dataclass
 class OVRecord:
     """One OpenVaccine training record."""
+
     sequence_id: str
-    sequence: str          # RNA sequence (A/C/G/U), 107 nt
-    cds_start: int         # always 0 for the 107-nt constructs (no 5'UTR)
+    sequence: str  # RNA sequence (A/C/G/U), 107 nt
+    cds_start: int  # always 0 for the 107-nt constructs (no 5'UTR)
     cds_end: int
     mean_reactivity: float
     mean_degradation: float
@@ -76,7 +75,7 @@ def load_openvaccine(
     if max_records:
         records = records[:max_records]
 
-    result = []
+    result: list[OVRecord] = []
     for r in records:
         seq = r.get("sequence", "").upper().replace("T", "U")
         if not seq:
@@ -94,14 +93,16 @@ def load_openvaccine(
                 deg_vals.extend([v for v in col_data if v is not None])
         mean_deg = float(np.nanmean(deg_vals)) if deg_vals else 0.0
 
-        result.append(OVRecord(
-            sequence_id=r.get("id", r.get("sequence_id", f"ov_{len(result)}")),
-            sequence=seq,
-            cds_start=0,
-            cds_end=len(seq),
-            mean_reactivity=mean_react,
-            mean_degradation=mean_deg,
-        ))
+        result.append(
+            OVRecord(
+                sequence_id=r.get("id", r.get("sequence_id", f"ov_{len(result)}")),
+                sequence=seq,
+                cds_start=0,
+                cds_end=len(seq),
+                mean_reactivity=mean_react,
+                mean_degradation=mean_deg,
+            )
+        )
 
     return result
 
@@ -113,6 +114,7 @@ def _synthetic_dataset(n: int = 200, rng_seed: int = 0) -> list[OVRecord]:
     to give the surrogate something real to learn.
     """
     import random
+
     rng = random.Random(rng_seed)
     bases = ["A", "C", "G", "U"]
     records = []
@@ -123,14 +125,16 @@ def _synthetic_dataset(n: int = 200, rng_seed: int = 0) -> list[OVRecord]:
         react = max(0.0, 0.7 - gc + rng.gauss(0, 0.05))
         # Degradation: correlated positively with reactivity and length
         deg = max(0.0, 0.4 + 0.3 * react + rng.gauss(0, 0.03))
-        records.append(OVRecord(
-            sequence_id=f"synthetic_{i:04d}",
-            sequence=seq,
-            cds_start=0,
-            cds_end=len(seq),
-            mean_reactivity=react,
-            mean_degradation=deg,
-        ))
+        records.append(
+            OVRecord(
+                sequence_id=f"synthetic_{i:04d}",
+                sequence=seq,
+                cds_start=0,
+                cds_end=len(seq),
+                mean_reactivity=react,
+                mean_degradation=deg,
+            )
+        )
     return records
 
 

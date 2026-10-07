@@ -119,9 +119,17 @@ class ObjectiveScores(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _check_fractions(self) -> "ObjectiveScores":
-        for name in ("gc_content", "gc3_content", "cai", "tai", "uridine_fraction",
-                     "start_unpairing_prob", "surrogate_te", "surrogate_confidence"):
+    def _check_fractions(self) -> ObjectiveScores:
+        for name in (
+            "gc_content",
+            "gc3_content",
+            "cai",
+            "tai",
+            "uridine_fraction",
+            "start_unpairing_prob",
+            "surrogate_te",
+            "surrogate_confidence",
+        ):
             val = getattr(self, name)
             if val is not None and not (0.0 <= val <= 1.0):
                 raise ValueError(f"{name} must be in [0, 1], got {val}")
@@ -136,12 +144,16 @@ class ObjectiveScores(BaseModel):
 
     def to_objective_vector(self) -> list[float]:
         """
-        Return a fixed-length objective vector for Pareto dominance checks.
+        Legacy **raw, unnormalised** objective vector (all-minimise convention).
 
-        Convention: **all values are to be minimised** by the archive.
-        Signs are flipped where higher is better (CAI, start_unpairing_prob).
+        .. deprecated::
+           Prefer :meth:`normalised_vector`. This vector mixes units — MFE in
+           kcal/mol alongside fractions in [0, 1] — so any volume computed over
+           it is dominated by whichever axis happens to have the widest numeric
+           range. It is retained only so that existing analysis scripts and
+           saved archives keep working.
 
-        Order:
+        Order (length is always 10):
           0  mfe                       (min; already negative)
           1  -cai                      (min proxy for max CAI)
           2  cpg_density               (min)
@@ -151,12 +163,19 @@ class ObjectiveScores(BaseModel):
           6  uorf_count                (min)
           7  -start_unpairing_prob     (min proxy for max unpairing)
           8  long_dsrna_count          (min)
-          9  surrogate_degradation     (min; only if available)
+          9  surrogate_degradation     (min)
+
+        The tenth element used to be appended only when a surrogate score
+        existed, so candidates scored with and without the surrogate produced
+        vectors of different lengths. ``zip``-based dominance checks then
+        compared only the shorter prefix and silently ignored the extra axis.
+        The length is now fixed; a missing surrogate contributes 0.0.
         """
+
         def _safe(v: float | None, default: float = 0.0) -> float:
             return float(v) if v is not None else default
 
-        vec = [
+        return [
             _safe(self.mfe, default=0.0),
             -_safe(self.cai, default=0.0),
             _safe(self.cpg_density, default=0.0),
@@ -166,10 +185,41 @@ class ObjectiveScores(BaseModel):
             float(_safe(self.uorf_count, default=0.0)),
             -_safe(self.start_unpairing_prob, default=0.0),
             float(_safe(self.long_dsrna_count, default=0.0)),
+            _safe(self.surrogate_degradation, default=0.0),
         ]
-        if self.surrogate_degradation is not None:
-            vec.append(_safe(self.surrogate_degradation))
-        return vec
+
+    def normalised_vector(
+        self,
+        seq_length: int,
+        objective_set=None,
+    ) -> list[float]:
+        """
+        Fixed-length objective vector normalised to [0, 1], all-minimise.
+
+        0.0 is the best achievable value on an axis and 1.0 the worst, so the
+        vector can be compared across targets of different lengths and fed to a
+        hypervolume indicator with a fixed reference point.
+
+        Parameters
+        ----------
+        seq_length : int
+            Length of the full mRNA sequence in nucleotides. Required because
+            length-extensive metrics (MFE, motif counts) are converted to
+            densities or per-kilobase rates before scaling.
+        objective_set : ObjectiveSet | str | None
+            Which objective space to project into. Defaults to
+            :data:`~mrna_design.metrics.objective_spec.DEFAULT_OBJECTIVE_SET`.
+
+        See :mod:`mrna_design.metrics.objective_spec` for the bounds and the
+        reasoning behind them.
+        """
+        from mrna_design.metrics.objective_spec import (
+            DEFAULT_OBJECTIVE_SET,
+            get_objective_set,
+        )
+
+        oset = DEFAULT_OBJECTIVE_SET if objective_set is None else get_objective_set(objective_set)
+        return oset.vector(self, seq_length)
 
     def summary_dict(self) -> dict[str, Any]:
         """Compact dict for logging / JSON output."""

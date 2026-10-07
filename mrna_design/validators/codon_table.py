@@ -22,7 +22,9 @@ from typing import Final
 
 # ── Raw data ────────────────────────────────────────────────────────────────
 
-_DATA_FILE = Path(__file__).parent.parent.parent / "data" / "codon_tables" / "human_codon_usage.json"
+_DATA_FILE = (
+    Path(__file__).parent.parent.parent / "data" / "codon_tables" / "human_codon_usage.json"
+)
 
 
 def _load_usage() -> dict:
@@ -50,6 +52,7 @@ HUMAN_FREQ_PER1K: Final[dict[str, float]] = {
 
 # ── Synonymous codon menu ─────────────────────────────────────────────────────
 
+
 def _build_synonymous() -> dict[str, list[str]]:
     groups: dict[str, list[str]] = {}
     for codon, aa in STANDARD_CODE.items():
@@ -63,6 +66,7 @@ def _build_synonymous() -> dict[str, list[str]]:
 SYNONYMOUS_CODONS: Final[dict[str, list[str]]] = _build_synonymous()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def codon_to_aa(codon: str) -> str:
     """
@@ -133,7 +137,4 @@ def translate(cds: str, stop_symbol: str = "*") -> str:
     cds = cds.upper().replace("T", "U")
     if len(cds) % 3 != 0:
         raise ValueError(f"CDS length {len(cds)} is not divisible by 3.")
-    return "".join(
-        (codon_to_aa(cds[i : i + 3]) or stop_symbol)
-        for i in range(0, len(cds), 3)
-    )
+    return "".join((codon_to_aa(cds[i : i + 3]) or stop_symbol) for i in range(0, len(cds), 3))

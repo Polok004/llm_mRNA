@@ -35,11 +35,11 @@ class Candidate(BaseModel):
     # ── Sequence & coordinates ────────────────────────────────────────────────
     sequence: str = Field(
         description="Full mRNA sequence in RNA alphabet (A/U/G/C, uppercase). "
-                    "Includes 5'UTR + CDS + 3'UTR if present.",
+        "Includes 5'UTR + CDS + 3'UTR if present.",
     )
     protein: str = Field(
         description="Protected amino acid sequence (single-letter code, uppercase). "
-                    "Used as ground truth for protein-identity validation.",
+        "Used as ground truth for protein-identity validation.",
     )
     cds_start: int = Field(
         ge=0,
@@ -86,24 +86,18 @@ class Candidate(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
 
     @model_validator(mode="after")
-    def _validate_structure(self) -> "Candidate":
+    def _validate_structure(self) -> Candidate:
         # Normalise sequence to uppercase RNA
         seq = self.sequence.upper().replace("T", "U")
         object.__setattr__(self, "sequence", seq)
 
         if self.cds_end <= self.cds_start:
-            raise ValueError(
-                f"cds_end ({self.cds_end}) must be > cds_start ({self.cds_start})"
-            )
+            raise ValueError(f"cds_end ({self.cds_end}) must be > cds_start ({self.cds_start})")
         cds_len = self.cds_end - self.cds_start
         if cds_len % 3 != 0:
-            raise ValueError(
-                f"CDS length ({cds_len}) is not a multiple of 3."
-            )
+            raise ValueError(f"CDS length ({cds_len}) is not a multiple of 3.")
         if self.cds_end > len(seq):
-            raise ValueError(
-                f"cds_end ({self.cds_end}) exceeds sequence length ({len(seq)})."
-            )
+            raise ValueError(f"cds_end ({self.cds_end}) exceeds sequence length ({len(seq)}).")
         return self
 
     # ── Properties ────────────────────────────────────────────────────────────
@@ -154,7 +148,7 @@ class Candidate(BaseModel):
         utr3: str = "",
         seed_strategy: str | None = None,
         **kwargs: Any,
-    ) -> "Candidate":
+    ) -> Candidate:
         """Construct a Candidate from a bare CDS string + optional UTRs."""
         cds = cds.upper().replace("T", "U")
         utr5 = utr5.upper().replace("T", "U")
@@ -176,7 +170,7 @@ class Candidate(BaseModel):
         new_cds: str,
         iteration: int = 0,
         lineage_append: list[EditRecord] | None = None,
-    ) -> "Candidate":
+    ) -> Candidate:
         """Return a new Candidate with the CDS replaced, preserving UTRs and lineage."""
         new_cds = new_cds.upper().replace("T", "U")
         new_seq = self.utr5 + new_cds + self.utr3

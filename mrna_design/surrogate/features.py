@@ -35,24 +35,39 @@ DIM = 22
 from __future__ import annotations
 
 import math
-from typing import Sequence
+from collections.abc import Sequence
 
 import numpy as np
 
-from mrna_design.metrics.cai import cai, cai_vector, gc_content, gc3_content
+from mrna_design.metrics.cai import cai, cai_vector, gc3_content, gc_content
 from mrna_design.metrics.immunogenicity import compute_immunogenicity
-from mrna_design.validators.codon_table import HUMAN_FREQUENCIES, codon_to_aa, translate
+from mrna_design.validators.codon_table import HUMAN_FREQUENCIES
 from mrna_design.validators.sequence_validator import check_no_uorfs
 
 DIM = 22
 FEATURE_NAMES = [
-    "cai", "gc_content", "gc3_content", "uridine_fraction",
-    "cpg_density", "upa_density", "gu_motif_count", "uorf_count",
-    "cai_mean", "cai_min", "cai_std",
-    "gc_cv", "gc_min_window", "gc_max_window",
-    "codon_rare_frac", "dinuc_entropy", "codon_entropy",
-    "stop_codon_type", "cds_length_log",
-    "poly_a_count", "poly_u_count", "start_context_gc",
+    "cai",
+    "gc_content",
+    "gc3_content",
+    "uridine_fraction",
+    "cpg_density",
+    "upa_density",
+    "gu_motif_count",
+    "uorf_count",
+    "cai_mean",
+    "cai_min",
+    "cai_std",
+    "gc_cv",
+    "gc_min_window",
+    "gc_max_window",
+    "codon_rare_frac",
+    "dinuc_entropy",
+    "codon_entropy",
+    "stop_codon_type",
+    "cds_length_log",
+    "poly_a_count",
+    "poly_u_count",
+    "start_context_gc",
 ]
 
 _STOP_MAP = {"UAA": 0.0, "UAG": 1.0, "UGA": 2.0}
@@ -114,14 +129,17 @@ def extract(
     if len(vec_valid) == 0:
         cai_mean, cai_min, cai_std, rare_frac = cai_score, cai_score, 0.0, 0.0
     else:
-        cai_mean  = float(np.mean(vec_valid))
-        cai_min   = float(np.min(vec_valid))
-        cai_std   = float(np.std(vec_valid))
+        cai_mean = float(np.mean(vec_valid))
+        cai_min = float(np.min(vec_valid))
+        cai_std = float(np.std(vec_valid))
         rare_frac = float(np.mean(vec_valid < 0.20))
 
     # ── Windowed GC variation (30-codon windows) ──────────────────────────────
-    codons = [cds_trimmed[i : i + 3] for i in range(0, len(cds_trimmed) - 2, 3)
-              if i + 3 <= len(cds_trimmed)]
+    codons = [
+        cds_trimmed[i : i + 3]
+        for i in range(0, len(cds_trimmed) - 2, 3)
+        if i + 3 <= len(cds_trimmed)
+    ]
     n_codons = len(codons)
     win_gc_vals = []
     step = max(1, _GC_WIN_CODONS // 3)
@@ -156,22 +174,39 @@ def extract(
     poly_a = _count_poly_runs(cds_trimmed, "A", min_run=4)
     poly_u = _count_poly_runs(cds_trimmed, "U", min_run=4)
 
-
     # ── Start-codon Kozak context GC ─────────────────────────────────────────
     ctx_start = max(0, cds_start - 15)
-    ctx_end = min(len(seq), cds_start + 18)   # +3 for AUG itself
+    ctx_end = min(len(seq), cds_start + 18)  # +3 for AUG itself
     ctx = seq[ctx_start:ctx_end]
     start_ctx_gc = gc_content(ctx) if ctx else gc
 
-    feat = np.array([
-        cai_score, gc, gc3, uridine_frac,
-        cpg, upa, gu, uorf_count,
-        cai_mean, cai_min, cai_std,
-        gc_cv, gc_min_w, gc_max_w,
-        rare_frac, dinuc_entropy, codon_entropy,
-        stop_type, cds_len_log,
-        float(poly_a), float(poly_u), start_ctx_gc,
-    ], dtype=np.float32)
+    feat = np.array(
+        [
+            cai_score,
+            gc,
+            gc3,
+            uridine_frac,
+            cpg,
+            upa,
+            gu,
+            uorf_count,
+            cai_mean,
+            cai_min,
+            cai_std,
+            gc_cv,
+            gc_min_w,
+            gc_max_w,
+            rare_frac,
+            dinuc_entropy,
+            codon_entropy,
+            stop_type,
+            cds_len_log,
+            float(poly_a),
+            float(poly_u),
+            start_ctx_gc,
+        ],
+        dtype=np.float32,
+    )
 
     assert len(feat) == DIM, f"Feature vector length mismatch: {len(feat)} != {DIM}"
     return feat
@@ -193,12 +228,13 @@ def batch_extract(
     n = len(sequences)
     out = np.empty((n, DIM), dtype=np.float32)
     utr5s = utr5s or [""] * n
-    for i, (seq, s, e, u5) in enumerate(zip(sequences, cds_starts, cds_ends, utr5s)):
+    for i, (seq, s, e, u5) in enumerate(zip(sequences, cds_starts, cds_ends, utr5s, strict=True)):
         out[i] = extract(seq, s, e, utr5=u5)
     return out
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
+
 
 def _dinuc_shannon(seq: str) -> float:
     """Shannon entropy of dinucleotide frequencies."""

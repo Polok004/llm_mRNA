@@ -121,6 +121,7 @@ class RegionDiagnostic(BaseModel):
     @classmethod
     def _finite(cls, v: Any) -> float:
         import math
+
         v = float(v)
         if not math.isfinite(v):
             raise ValueError(f"metric/threshold must be finite, got {v}")

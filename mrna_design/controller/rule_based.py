@@ -40,8 +40,9 @@ from __future__ import annotations
 import random
 
 from mrna_design.controller.base import BaseController
+from mrna_design.logging_utils import get_logger
 from mrna_design.models.candidate import Candidate
-from mrna_design.models.diagnostics import IssueType, RegionDiagnostic, Severity
+from mrna_design.models.diagnostics import IssueType, RegionDiagnostic
 from mrna_design.models.edits import CodonEdit, EditProposal
 from mrna_design.validators.codon_table import (
     HUMAN_FREQUENCIES,
@@ -49,7 +50,6 @@ from mrna_design.validators.codon_table import (
     codon_to_aa,
     is_synonymous,
 )
-from mrna_design.logging_utils import get_logger
 
 log = get_logger("controller.rule_based")
 
@@ -59,7 +59,7 @@ def _codon_gc(codon: str) -> float:
 
 
 def _codon_hamming(a: str, b: str) -> int:
-    return sum(x != y for x, y in zip(a, b))
+    return sum(x != y for x, y in zip(a, b, strict=True))
 
 
 def _lowest_gc_synonym(codon: str, exclude_self: bool = True) -> str | None:
@@ -110,10 +110,12 @@ def _disrupts_complement(original: str, new: str, seed: str) -> bool:
     Return True if replacing `original` with `new` disrupts complementarity
     to `seed` (used for miRNA seed disruption).
     """
-    from mrna_design.metrics.immunogenicity import _reverse_complement
-    rc_seed = _reverse_complement(seed)
-    return (original in rc_seed or rc_seed in original) and \
-           (new not in rc_seed and rc_seed not in new)
+    from mrna_design.metrics.immunogenicity import reverse_complement
+
+    rc_seed = reverse_complement(seed)
+    return (original in rc_seed or rc_seed in original) and (
+        new not in rc_seed and rc_seed not in new
+    )
 
 
 class RuleBasedController(BaseController):
@@ -269,15 +271,15 @@ class RuleBasedController(BaseController):
     def _rule_reduce_gc(
         self, diag: RegionDiagnostic, candidate: Candidate, used: set[int], n: int
     ) -> list[CodonEdit]:
-        codons = self._codons_in_window(
-            candidate, diag.window_start, diag.window_end, used
-        )
+        codons = self._codons_in_window(candidate, diag.window_start, diag.window_end, used)
         # Sort by GC content of current codon (high GC first)
         codons.sort(key=lambda x: _codon_gc(x[1]), reverse=True)
         edits = []
         for idx, codon in codons[:n]:
             new = _lowest_gc_synonym(codon)
-            e = self._make_edit(idx, codon, new, "Reduce GC to destabilise hairpin", diag.issue.value)
+            e = self._make_edit(
+                idx, codon, new, "Reduce GC to destabilise hairpin", diag.issue.value
+            )
             if e:
                 edits.append(e)
         return edits
@@ -285,13 +287,13 @@ class RuleBasedController(BaseController):
     def _rule_increase_entropy(
         self, diag: RegionDiagnostic, candidate: Candidate, used: set[int], n: int
     ) -> list[CodonEdit]:
-        codons = self._codons_in_window(
-            candidate, diag.window_start, diag.window_end, used
-        )
+        codons = self._codons_in_window(candidate, diag.window_start, diag.window_end, used)
         edits = []
         for idx, codon in codons[:n]:
             new = _most_different_synonym(codon)
-            e = self._make_edit(idx, codon, new, "Increase sequence entropy to disrupt stem", diag.issue.value)
+            e = self._make_edit(
+                idx, codon, new, "Increase sequence entropy to disrupt stem", diag.issue.value
+            )
             if e:
                 edits.append(e)
         return edits
@@ -299,11 +301,10 @@ class RuleBasedController(BaseController):
     def _rule_boost_cai(
         self, diag: RegionDiagnostic, candidate: Candidate, used: set[int], n: int
     ) -> list[CodonEdit]:
-        codons = self._codons_in_window(
-            candidate, diag.window_start, diag.window_end, used
-        )
+        codons = self._codons_in_window(candidate, diag.window_start, diag.window_end, used)
         # Sort by current CAI weight (lowest first — most to gain)
         from mrna_design.validators.codon_table import HUMAN_FREQUENCIES
+
         codons.sort(key=lambda x: HUMAN_FREQUENCIES.get(x[1], 0.0))
         edits = []
         for idx, codon in codons[:n]:
@@ -316,9 +317,7 @@ class RuleBasedController(BaseController):
     def _rule_remove_cpg(
         self, diag: RegionDiagnostic, candidate: Candidate, used: set[int], n: int
     ) -> list[CodonEdit]:
-        codons = self._codons_in_window(
-            candidate, diag.window_start, diag.window_end, used
-        )
+        codons = self._codons_in_window(candidate, diag.window_start, diag.window_end, used)
         edits = []
         for idx, codon in codons:
             if "CG" in codon and idx not in used:
@@ -333,9 +332,7 @@ class RuleBasedController(BaseController):
     def _rule_remove_upa(
         self, diag: RegionDiagnostic, candidate: Candidate, used: set[int], n: int
     ) -> list[CodonEdit]:
-        codons = self._codons_in_window(
-            candidate, diag.window_start, diag.window_end, used
-        )
+        codons = self._codons_in_window(candidate, diag.window_start, diag.window_end, used)
         edits = []
         for idx, codon in codons:
             if "UA" in codon and idx not in used:
@@ -350,9 +347,7 @@ class RuleBasedController(BaseController):
     def _rule_reduce_u(
         self, diag: RegionDiagnostic, candidate: Candidate, used: set[int], n: int
     ) -> list[CodonEdit]:
-        codons = self._codons_in_window(
-            candidate, diag.window_start, diag.window_end, used
-        )
+        codons = self._codons_in_window(candidate, diag.window_start, diag.window_end, used)
         # Sort by U count in codon (most U first)
         codons.sort(key=lambda x: x[1].count("U"), reverse=True)
         edits = []
@@ -362,7 +357,9 @@ class RuleBasedController(BaseController):
             if not synonyms:
                 continue
             new = min(synonyms, key=lambda c: c.count("U"))
-            e = self._make_edit(idx, codon, new, "Reduce U content for TLR/immunogenicity", diag.issue.value)
+            e = self._make_edit(
+                idx, codon, new, "Reduce U content for TLR/immunogenicity", diag.issue.value
+            )
             if e:
                 edits.append(e)
         return edits
@@ -375,9 +372,7 @@ class RuleBasedController(BaseController):
             seed = diag.extra.get("seed_sequence", "")
             if not seed:
                 return []
-            codons = self._codons_in_window(
-                candidate, diag.window_start, diag.window_end, used
-            )
+            codons = self._codons_in_window(candidate, diag.window_start, diag.window_end, used)
         else:
             codons = [
                 (i, candidate.codons[i])
@@ -395,7 +390,9 @@ class RuleBasedController(BaseController):
             # Prefer a codon that disrupts the seed complement
             disrupting = [c for c in synonyms if _disrupts_complement(codon, c, seed)]
             new = disrupting[0] if disrupting else self._rng.choice(synonyms)
-            e = self._make_edit(idx, codon, new, f"Disrupt miRNA seed match ({diag.detail})", diag.issue.value)
+            e = self._make_edit(
+                idx, codon, new, f"Disrupt miRNA seed match ({diag.detail})", diag.issue.value
+            )
             if e:
                 edits.append(e)
         return edits
@@ -405,12 +402,13 @@ class RuleBasedController(BaseController):
     ) -> list[CodonEdit]:
         # Sample n random codons and introduce GC variation
         all_codons = [
-            (i, c) for i, c in enumerate(candidate.codons)
+            (i, c)
+            for i, c in enumerate(candidate.codons)
             if i not in used and aa_synonyms(codon_to_aa(c))
         ]
         self._rng.shuffle(all_codons)
-        edits = []
-        for idx, codon in all_codons[:n * 2]:
+        edits: list[CodonEdit] = []
+        for idx, codon in all_codons[: n * 2]:
             if len(edits) >= n:
                 break
             aa = codon_to_aa(codon)
@@ -419,7 +417,13 @@ class RuleBasedController(BaseController):
                 continue
             # Pick the one with GC furthest from current
             new = max(synonyms, key=lambda c: abs(_codon_gc(c) - _codon_gc(codon)))
-            e = self._make_edit(idx, codon, new, "Increase GC variation to improve ensemble diversity", diag.issue.value)
+            e = self._make_edit(
+                idx,
+                codon,
+                new,
+                "Increase GC variation to improve ensemble diversity",
+                diag.issue.value,
+            )
             if e:
                 edits.append(e)
         return edits
@@ -434,17 +438,17 @@ class RuleBasedController(BaseController):
     ) -> list[CodonEdit]:
         """When no diagnostics fire, greedily improve CAI on the lowest-weight codons."""
         from mrna_design.validators.codon_table import HUMAN_FREQUENCIES
-        indexed = [
-            (i, c) for i, c in enumerate(candidate.codons)
-            if i not in used
-        ]
+
+        indexed = [(i, c) for i, c in enumerate(candidate.codons) if i not in used]
         indexed.sort(key=lambda x: HUMAN_FREQUENCIES.get(x[1], 0.0))
-        edits = []
-        for idx, codon in indexed[:n * 2]:
+        edits: list[CodonEdit] = []
+        for idx, codon in indexed[: n * 2]:
             if len(edits) >= n:
                 break
             new = _highest_cai_synonym(codon)
-            e = self._make_edit(idx, codon, new, "Greedy CAI improvement (no diagnostics)", "cai_improvement")
+            e = self._make_edit(
+                idx, codon, new, "Greedy CAI improvement (no diagnostics)", "cai_improvement"
+            )
             if e:
                 edits.append(e)
         return edits
@@ -455,25 +459,24 @@ class RuleBasedController(BaseController):
         n: int,
     ) -> list[CodonEdit]:
         """Last-resort: make n random synonymous substitutions."""
-        eligible = [
-            (i, c) for i, c in enumerate(candidate.codons)
-            if aa_synonyms(codon_to_aa(c))
-        ]
+        eligible = [(i, c) for i, c in enumerate(candidate.codons) if aa_synonyms(codon_to_aa(c))]
         if not eligible:
             return []
         chosen = self._rng.sample(eligible, min(n, len(eligible)))
-        edits = []
+        edits: list[CodonEdit] = []
         for idx, codon in chosen:
             aa = codon_to_aa(codon)
             synonyms = [c for c in aa_synonyms(aa) if c != codon]
             if not synonyms:
                 continue
             new = self._rng.choice(synonyms)
-            edits.append(CodonEdit(
-                codon_index=idx,
-                original_codon=codon,
-                new_codon=new,
-                reason="Random synonymous substitution (last resort)",
-                targeting_issue=None,
-            ))
+            edits.append(
+                CodonEdit(
+                    codon_index=idx,
+                    original_codon=codon,
+                    new_codon=new,
+                    reason="Random synonymous substitution (last resort)",
+                    targeting_issue=None,
+                )
+            )
         return edits

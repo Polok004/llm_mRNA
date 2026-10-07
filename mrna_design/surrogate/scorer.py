@@ -21,14 +21,13 @@ those come from the primary metrics pipeline.
 
 from __future__ import annotations
 
-from mrna_design.models.candidate import Candidate
-from mrna_design.models.objectives import ObjectiveScores
-from mrna_design.surrogate.model import SurrogateModel, SurrogatePrediction
 from mrna_design.logging_utils import get_logger
+from mrna_design.models.candidate import Candidate
+from mrna_design.surrogate.model import SurrogateModel, SurrogatePrediction
 
 log = get_logger("surrogate.scorer")
 
-_MODEL: SurrogateModel | None = None   # module-level singleton
+_MODEL: SurrogateModel | None = None  # module-level singleton
 
 
 def get_global_model(

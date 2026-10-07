@@ -8,6 +8,7 @@ without a GPU or HuggingFace access.
 Tests that don't require transformers (the availability flag, fallback
 behaviour) always run.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -15,8 +16,8 @@ import pytest
 
 from mrna_design.surrogate.rnafm import RNAFM_AVAILABLE, RNAFM_DIM
 
-
 # ── Always-running tests ───────────────────────────────────────────────────────
+
 
 def test_availability_flag_is_bool():
     """RNAFM_AVAILABLE must be a plain bool regardless of environment."""
@@ -31,6 +32,7 @@ def test_dim_constant():
 def test_model_fallback_when_unavailable():
     """SurrogateModel(use_rnafm=True) silently falls back when RNA-FM is absent."""
     from mrna_design.surrogate.model import SurrogateModel
+
     m = SurrogateModel(use_rnafm=True)
     # If RNA-FM is not installed, _use_rnafm should be False
     if not RNAFM_AVAILABLE:
@@ -43,12 +45,14 @@ def test_model_fallback_when_unavailable():
 
 # ── RNA-FM-only tests (skipped without transformers) ──────────────────────────
 
+
 @pytest.fixture(scope="module")
 def rnafm():
-    """Import the rnafm module, skipping if not available."""
-    transformers = pytest.importorskip("transformers")
-    torch = pytest.importorskip("torch")
+    """Import the rnafm module, skipping if its dependencies are not available."""
+    pytest.importorskip("transformers")
+    pytest.importorskip("torch")
     from mrna_design.surrogate import rnafm as _rnafm
+
     return _rnafm
 
 

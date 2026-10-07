@@ -52,9 +52,16 @@ class BaseController(ABC):
         """
         ...
 
-    def reset(self) -> None:
-        """Reset any internal state between runs. Override if needed."""
-        pass
+    def reset(self) -> None:  # noqa: B027  (optional hook, deliberately not abstract)
+        """
+        Reset any internal state between runs.
+
+        Deliberately concrete and empty: stateless controllers should not be
+        forced to implement it. Stateful ones (GA, NSGA-II, the LLM controller's
+        token counters) must override it, or state leaks between benchmark runs
+        and the seeds stop being independent.
+        """
+        return None
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(name={self.name!r})"

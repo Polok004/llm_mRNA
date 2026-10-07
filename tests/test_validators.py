@@ -8,15 +8,18 @@ from __future__ import annotations
 
 import pytest
 
+from mrna_design.models.candidate import Candidate
+from mrna_design.models.edits import CodonEdit, EditProposal
+from mrna_design.validators.codon_applicator import apply_edit_proposal
 from mrna_design.validators.codon_table import (
-    SYNONYMOUS_CODONS,
     HUMAN_FREQUENCIES,
     STANDARD_CODE,
+    SYNONYMOUS_CODONS,
+    aa_synonyms,
     codon_to_aa,
     is_synonymous,
     max_freq_codon,
     translate,
-    aa_synonyms,
 )
 from mrna_design.validators.sequence_validator import (
     check_gc_bounds,
@@ -25,15 +28,10 @@ from mrna_design.validators.sequence_validator import (
     check_protein_identity,
     check_restriction_sites,
     check_start_codon,
-    validate_all,
-    all_pass,
 )
-from mrna_design.validators.codon_applicator import apply_edit_proposal
-from mrna_design.models.candidate import Candidate
-from mrna_design.models.edits import CodonEdit, EditProposal
-
 
 # ── Codon table ───────────────────────────────────────────────────────────────
+
 
 class TestCodonTable:
     def test_all_64_codons_present(self):
@@ -50,7 +48,7 @@ class TestCodonTable:
         assert codon_to_aa("ATG") == "M"
 
     def test_is_synonymous_true(self):
-        assert is_synonymous("GAA", "GAG")   # both Glu
+        assert is_synonymous("GAA", "GAG")  # both Glu
 
     def test_is_synonymous_false(self):
         assert not is_synonymous("GAA", "GCU")  # Glu vs Ala
@@ -66,8 +64,9 @@ class TestCodonTable:
             if aa in ("M", "W", "*") or len(codons) < 2:
                 continue
             freqs = [HUMAN_FREQUENCIES.get(c, 0.0) for c in codons]
-            assert freqs == sorted(freqs, reverse=True), \
+            assert freqs == sorted(freqs, reverse=True), (
                 f"Synonymous codons for {aa} not sorted by frequency: {codons}"
+            )
 
     def test_translate_egfp_start(self):
         # AUGGUUAGC → MVS
@@ -80,7 +79,7 @@ class TestCodonTable:
 
     def test_translate_wrong_length(self):
         with pytest.raises(ValueError):
-            translate("AUGGU")   # 5 nt — not divisible by 3
+            translate("AUGGU")  # 5 nt — not divisible by 3
 
     def test_aa_synonyms_met_has_one(self):
         assert aa_synonyms("M") == ["AUG"]
@@ -97,11 +96,13 @@ class TestCodonTable:
             if aa == "*":
                 continue
             total = sum(HUMAN_FREQUENCIES.get(c, 0.0) for c in codons)
-            assert abs(total - 1.0) < 0.05, \
+            assert abs(total - 1.0) < 0.05, (
                 f"Frequencies for {aa} sum to {total:.3f} (expected ~1.0)"
+            )
 
 
 # ── Sequence validator ────────────────────────────────────────────────────────
+
 
 class TestSequenceValidator:
     def _make_candidate(self, cds: str, protein: str, utr5: str = "", utr3: str = "") -> Candidate:
@@ -180,6 +181,7 @@ class TestSequenceValidator:
 
 # ── Codon applicator ──────────────────────────────────────────────────────────
 
+
 class TestCodonApplicator:
     def _make_candidate(self, cds: str, protein: str) -> Candidate:
         return Candidate.from_cds(cds=cds, protein=protein)
@@ -194,18 +196,21 @@ class TestCodonApplicator:
             alts = [x for x in aa_synonyms(aa) if x != codon]
             if alts:
                 proposal = EditProposal(
-                    edits=[CodonEdit(
-                        codon_index=i,
-                        original_codon=codon,
-                        new_codon=alts[0],
-                        reason="test",
-                    )],
+                    edits=[
+                        CodonEdit(
+                            codon_index=i,
+                            original_codon=codon,
+                            new_codon=alts[0],
+                            reason="test",
+                        )
+                    ],
                     controller_type="rule_based",
                 )
                 new_c, records = apply_edit_proposal(c, proposal)
                 assert records[0].accepted, f"Edit should be accepted: {records[0]}"
                 # Protein identity preserved
-                from mrna_design.validators import translate, check_protein_identity
+                from mrna_design.validators import check_protein_identity
+
                 result = check_protein_identity(
                     new_c.sequence, new_c.cds_start, new_c.cds_end, c.protein
                 )
@@ -215,14 +220,15 @@ class TestCodonApplicator:
 
     def test_wrong_original_codon_rejected(self, minimal_candidate):
         c = minimal_candidate
-        codon_0 = c.codons[0]   # AUG
         proposal = EditProposal(
-            edits=[CodonEdit(
-                codon_index=0,
-                original_codon="GGG",   # wrong — actual is AUG
-                new_codon="GGC",
-                reason="test wrong original",
-            )],
+            edits=[
+                CodonEdit(
+                    codon_index=0,
+                    original_codon="GGG",  # wrong — actual is AUG
+                    new_codon="GGC",
+                    reason="test wrong original",
+                )
+            ],
             controller_type="rule_based",
         )
         _, records = apply_edit_proposal(c, proposal)
@@ -233,12 +239,14 @@ class TestCodonApplicator:
         c = minimal_candidate
         # AUG (M) → GGC (G) — not synonymous
         proposal = EditProposal(
-            edits=[CodonEdit(
-                codon_index=0,
-                original_codon="AUG",
-                new_codon="GGC",
-                reason="test non-synonymous",
-            )],
+            edits=[
+                CodonEdit(
+                    codon_index=0,
+                    original_codon="AUG",
+                    new_codon="GGC",
+                    reason="test non-synonymous",
+                )
+            ],
             controller_type="rule_based",
         )
         _, records = apply_edit_proposal(c, proposal)
@@ -248,6 +256,7 @@ class TestCodonApplicator:
     def test_protein_identity_preserved_after_multiple_edits(self, egfp_cds_candidate):
         """Apply several edits and verify protein identity is never broken."""
         from mrna_design.validators import check_protein_identity
+
         c = egfp_cds_candidate
         edits = []
         used = set()
@@ -255,12 +264,14 @@ class TestCodonApplicator:
             aa = codon_to_aa(codon)
             alts = [x for x in aa_synonyms(aa) if x != codon]
             if alts and i not in used:
-                edits.append(CodonEdit(
-                    codon_index=i,
-                    original_codon=codon,
-                    new_codon=alts[0],
-                    reason="test",
-                ))
+                edits.append(
+                    CodonEdit(
+                        codon_index=i,
+                        original_codon=codon,
+                        new_codon=alts[0],
+                        reason="test",
+                    )
+                )
                 used.add(i)
 
         if not edits:
@@ -272,7 +283,5 @@ class TestCodonApplicator:
         # At least one accepted
         assert any(r.accepted for r in records)
 
-        result = check_protein_identity(
-            new_c.sequence, new_c.cds_start, new_c.cds_end, c.protein
-        )
+        result = check_protein_identity(new_c.sequence, new_c.cds_start, new_c.cds_end, c.protein)
         assert result.passed, f"Protein identity violated: {result.reason}"

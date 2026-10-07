@@ -12,7 +12,6 @@ which have no alternatives).
 from __future__ import annotations
 
 import math
-from typing import Sequence
 
 from mrna_design.validators.codon_table import (
     HUMAN_FREQUENCIES,
@@ -77,6 +76,7 @@ def cai_vector(cds: str) -> list[float]:
     Excluded codons (M, W, stop) get weight NaN for easy masking.
     """
     import math as _math
+
     cds = cds.upper().replace("T", "U")
     result = []
     for i in range(0, len(cds), 3):
@@ -120,11 +120,13 @@ def sliding_window_cai(
     for start in range(0, n_codons - window_codons + 1, step_codons):
         end = start + window_codons
         window_cds = cds[start * 3 : end * 3]
-        results.append({
-            "codon_start": start,
-            "codon_end": end,
-            "cai": cai(window_cds),
-        })
+        results.append(
+            {
+                "codon_start": start,
+                "codon_end": end,
+                "cai": cai(window_cds),
+            }
+        )
     return results
 
 

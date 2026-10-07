@@ -1,0 +1,29 @@
+# Byte-compiled / caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environments
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+
+# Run outputs — regenerate with `make bench-full`
+results/
+logs/
+
+# Downloaded databases and trained models (see scripts/setup_databases.sh)
+data/mirbase/
+data/gencode/
+data/openvaccine/
+data/surrogate/
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# Secrets — never commit API keys
+.env
