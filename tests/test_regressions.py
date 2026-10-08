@@ -121,7 +121,8 @@ class TestSurrogateConfidence:
     """
 
     @pytest.fixture(scope="class")
-    def model(self):
+    @staticmethod
+    def model():
         from mrna_design.surrogate.model import SurrogateModel
         from mrna_design.surrogate.openvaccine import load_openvaccine
 

@@ -10,12 +10,43 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
+# tenacity lives in the optional [llm] extra, but this module is reached from
+# mrna_design.controller.__init__, so a hard import here makes the ENTIRE
+# controller package — rule_based, NSGA-II, the Pareto archive — unimportable
+# for anyone who did not install that extra. That is what broke CI.
+#
+# Retrying is a convenience, not a correctness requirement: without tenacity the
+# provider calls simply do not auto-retry, and LLMController already degrades to
+# an empty proposal on failure.
+try:
+    from tenacity import (
+        retry,
+        retry_if_exception_type,
+        stop_after_attempt,
+        wait_exponential,
+    )
+
+    TENACITY_AVAILABLE = True
+except ImportError:  # pragma: no cover - exercised only in minimal installs
+    TENACITY_AVAILABLE = False
+
+    def retry(*_args, **_kwargs):  # type: ignore[no-redef]
+        """No-op stand-in for tenacity.retry when tenacity is absent."""
+
+        def _decorator(fn):
+            return fn
+
+        return _decorator
+
+    def stop_after_attempt(*_args, **_kwargs):  # type: ignore[no-redef]
+        return None
+
+    def wait_exponential(*_args, **_kwargs):  # type: ignore[no-redef]
+        return None
+
+    def retry_if_exception_type(*_args, **_kwargs):  # type: ignore[no-redef]
+        return None
+
 
 from mrna_design.logging_utils import get_logger
 

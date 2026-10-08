@@ -29,11 +29,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
-from sklearn.model_selection import cross_val_score
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
 
+# scikit-learn lives in the optional [surrogate] extra. Importing it at module
+# level would make `import mrna_design.surrogate` fail for a plain install, the
+# same defect that took tenacity out of the controller package. The imports are
+# deferred into the two functions that actually need them.
 from mrna_design.logging_utils import get_logger
 from mrna_design.models.candidate import Candidate
 from mrna_design.surrogate.features import DIM, FEATURE_NAMES, extract
@@ -55,8 +55,28 @@ class SurrogatePrediction:
     confidence: float  # rough confidence based on RF tree variance (0–1)
 
 
-def _make_pipeline(n_estimators: int = 200, max_depth: int = 6) -> dict[str, Pipeline]:
+def _require_sklearn():
+    """Import scikit-learn, with an actionable message when the extra is missing."""
+    try:
+        from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
+        from sklearn.pipeline import Pipeline
+        from sklearn.preprocessing import StandardScaler
+    except ImportError as exc:  # pragma: no cover - minimal installs only
+        raise ImportError(
+            "The surrogate model needs scikit-learn, which ships in the optional "
+            "[surrogate] extra. Install it with: pip install -e '.[surrogate]'"
+        ) from exc
+    return GradientBoostingRegressor, RandomForestRegressor, Pipeline, StandardScaler
+
+
+def _make_pipeline(n_estimators: int = 200, max_depth: int = 6) -> dict:
     """Return untrained RF + GB pipelines for both targets."""
+    (
+        GradientBoostingRegressor,
+        RandomForestRegressor,
+        Pipeline,
+        StandardScaler,
+    ) = _require_sklearn()
 
     def _rf():
         return Pipeline(
@@ -196,6 +216,8 @@ class SurrogateModel:
         if cv_folds > 0 and len(records) >= cv_folds * 5:
             for target_name, y in [("reactivity", y_react), ("degradation", y_deg)]:
                 pipe_key = f"rf_{target_name[:5]}" if target_name == "reactivity" else "rf_deg"
+                from sklearn.model_selection import cross_val_score
+
                 cv_r2 = cross_val_score(
                     self._pipes[pipe_key], X, y, cv=cv_folds, scoring="r2", n_jobs=-1
                 )
